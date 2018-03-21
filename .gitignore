@@ -1,0 +1,6 @@
+**/data
+**/fashion
+**/__pycache__
+*.ckpt*
+**/checkpoint*
+*checkpoint*
