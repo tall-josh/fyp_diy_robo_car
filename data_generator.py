@@ -77,7 +77,8 @@ class DataGenerator():
 #             ones  = np.ones((80,40))
 #             image = np.concatenate((zeros, ones), axis=1)
 #             anno  = 7
-            image, anno = self.mirror_at_random(image, anno)
+            if self.shuffle:
+                image, anno = self.mirror_at_random(image, anno)
             images.append(image)
             annos.append(anno)
         
