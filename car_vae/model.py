@@ -13,61 +13,88 @@ class Model:
         self.training = tf.placeholder(tf.bool, name="training")
         # used for calculating average of predicted distribution 
         self.classes = tf.constant(list(range(0,self.num_bins)), dtype=tf.float32, name="classes")
+        with tf.name_scope("encoder"):
+            with tf.name_scope("enc1"):
+                filt_num    = 10
+                filt_size   = (8,8)
+                filt_stride = (2, 2)  # (Height, Width)
+                padding     = "same"
+                activation  = tf.nn.relu
+                # xavier initializer by default :-)
+                self.enc1 = layers.conv2d(self.x,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay1")
 
-        with tf.name_scope("lay1"):
-            filt_num    = 10
-            filt_size   = (8,8)
-            filt_stride = (2, 2)  # (Height, Width)
-            padding     = "same"
-            activation  = tf.nn.relu
-            # xavier initializer by default :-)
-            self.lay1 = layers.conv2d(self.x,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay1")
+            with tf.name_scope("enc2"):
+                filt_num    = 20
+                filt_size   = (4,4)
+                filt_stride = (2, 2)
+                padding     = "same"
+                activation  = tf.nn.relu
 
-        with tf.name_scope("lay2"):
-            filt_num    = 20
-            filt_size   = (4,4)
-            filt_stride = (2, 2)
-            padding     = "same"
-            activation  = tf.nn.relu
+                self.enc2 = layers.conv2d(self.enc1,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay2")
 
-            self.lay2 = layers.conv2d(self.lay1,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay2")
+            with tf.name_scope("enc3"):
+                filt_num    = 40
+                filt_size   = (2,2)
+                filt_stride = (1, 1)
+                padding     = "same"
+                activation  = tf.nn.relu
 
-        with tf.name_scope("lay3"):
-            filt_num    = 40
-            filt_size   = (2,2)
-            filt_stride = (1, 1)
-            padding     = "same"
-            activation  = tf.nn.relu
+                self.enc3 = layers.conv2d(self.enc2,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay3")
+                self.enc3_flat = layers.flatten(self.enc3)
 
-            self.lay3 = layers.conv2d(self.lay2,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay3")
-            self.lay3_flat = layers.flatten(self.lay3)
+            with tf.name_scope("enc4"):
+                neurons = 1600
+                activation  = tf.nn.relu
+                dropout_rate = 0.6
 
-        with tf.name_scope("fc1"):
-            neurons = 1600
-            activation  = tf.nn.relu
-            dropout_rate = 0.6
+                self.enc4 = layers.fully_connected(self.enc3_flat, neurons, activation_fn=activation, scope="enc4")
+                self.enc4_drop = tf.layers.dropout(self.enc4, rate=dropout_rate, training=self.training, name="enc4_drop")
 
-            self.fc1 = layers.fully_connected(self.lay3_flat, neurons, activation_fn=activation, scope="fc1")
-            self.fc1_drop = tf.layers.dropout(self.fc1, rate=dropout_rate, training=self.training, name="drop1")
+            with tf.name_scope("enc5"):
+                neurons = 160
+                activation  = tf.nn.relu
+                dropout_rate = 0.6
 
-        with tf.name_scope("fc2"):
-            neurons = 160
-            activation  = tf.nn.relu
-            dropout_rate = 0.6
+                self.enc5 = layers.fully_connected(self.enc4_drop, neurons, activation_fn=activation, scope="enc5")
+                self.enc5_drop = tf.layers.dropout(self.enc5, rate=dropout_rate, training=self.training, name="enc5_drop")
 
-            self.fc2 = layers.fully_connected(self.fc1_drop, neurons, activation_fn=activation, scope="fc2")
-            self.fc2_drop = tf.layers.dropout(self.fc2, rate=dropout_rate, training=self.training, name="drop2")
+            with tf.name_scope("embedding"):
+                embedding_dim = self.num_bins
+                activation  = None
+                self.mu layers.dense(self.enc5_drop, embedding_dim, activation=activation)
+                
+                self.log_sigma = layers.dense(self.enc5_drop, embedding_dim, activation=activation)
+                
+                self.epsilon = tf.random_normal(shape=tf.shape(self.mu))
+                self.z     = self.mu + tf.exp(self.log_sigma / 2.) * self.epsilon
+                
+        with tf.name_scope("decoder"):
+            with tf.name_scope("dec5"):
+                neurons = 160
+                activation  = tf.nn.relu
+                dropout_rate = 0.6
+                self.dec5 = layers.fully_connected(self.z, neurons, activation_fn=activation, scope="dec5")
+                self.dec5_drop = tf.layers.dropout(self.dec5, rate=dropout_rate, training=self.training, name="dec5_drop")
 
-        with tf.name_scope("output"):
-            neurons = self.num_bins
-            activation  = None
+            with tf.name_scope("dec4"):
+                neurons = 1600
+                activation  = tf.nn.relu
+                dropout_rate = 0.6
+                self.dec4 = layers.fully_connected(self.dec5_drop, neurons, activation_fn=activation, scope="dec4")
+                self.dec4_drop = tf.layers.dropout(self.dec4, rate=dropout_rate, training=self.training, name="dec4_drop")
 
-            self.logits = layers.fully_connected(self.fc2_drop, neurons, activation_fn=activation, scope="lay_logits")
-            self.probs = layers.softmax(self.logits, scope="probs")
+            with tf.name_scope("dec3"):
+                pass
 
-        with tf.name_scope("loss"):
-            self.per_class_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y, logits=self.logits, name="class_loss")
-            self.loss = tf.reduce_mean(self.per_class_loss)
+            with tf.name_scope("dec2"):
+                pass
+
+            with tf.name_scope("dec1"):
+                pass
+
+            with tf.name_scope("loss"):
+                self.per_class_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y, logits=self.logits, name="class_loss")
+                self.loss = tf.reduce_mean(self.per_class_loss)
 
         with tf.name_scope("accuracy"):
             '''

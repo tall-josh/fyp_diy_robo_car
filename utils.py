@@ -89,7 +89,7 @@ def rgb2gray(data):
     gray = np.asarray(gray)
     return gray
 
-def get_data_point_names(images_dir, annos_dir, count=None):
+def get_data_point_names_sequnetial(images_dir, annos_dir, count=None):
     '''
     Loads image and annotation names and checks that all images have an annotation.
     Shuffles names. If count is not None then only count elements will be returned.
@@ -109,7 +109,7 @@ def get_data_point_names(images_dir, annos_dir, count=None):
     #don't worry about this. It just allows me to show a loading bar
     print("Importing images and annotations.")
     missing_names = list()
-    
+    im_names.sort()
     pbar = tqdm(list(range(len(im_names)-1)))  
     for name, _ in zip(im_names, pbar):
         if name not in an_names:
@@ -124,7 +124,6 @@ def get_data_point_names(images_dir, annos_dir, count=None):
     except AssertionError as e:
         print(len(missing_names))
     
-    np.random.shuffle(result) 
     return result
 
 

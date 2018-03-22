@@ -91,6 +91,8 @@ class Model:
             percent_error = abs_diff / tf.cast(tf.shape(self.classes), tf.float32)
             self.accuracy   = 1. - percent_error
             self.mean_accuracy = tf.reduce_mean(self.accuracy)
+        
+        self.saver = tf.train.Saver()
     
     
     def Train(self, train_gen=None, test_gen=None, epochs=10, lr=0.001):
@@ -101,7 +103,7 @@ class Model:
         
         optimizer = tf.train.AdamOptimizer(learning_rate=lr)
         train_step = optimizer.minimize(self.loss)
-        self.saver = tf.train.Saver()
+        
         
         self.train_loss = list()
         self.test_loss  = list()

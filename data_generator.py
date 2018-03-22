@@ -5,7 +5,7 @@ from utils import *
 
 class DataGenerator():
     
-    def __init__(self, batch_size, data_set, image_dir, anno_dir, num_bins, debug=None):
+    def __init__(self, batch_size, data_set, image_dir, anno_dir, num_bins, shuffle=True, debug=None):
         self.__unsized_data_set = data_set
         self.batch_size      = batch_size
         self.image_dir       = image_dir
@@ -13,11 +13,14 @@ class DataGenerator():
         self.steps_per_epoch = len(self.__unsized_data_set) // self.batch_size
         self.current_step    = 0
         self.num_bins        = num_bins
+        self.shuffle         = shuffle
         self.debug           = debug
         self.data_set = self.size_dataset_to_suit_batch_size()
     
     def size_dataset_to_suit_batch_size(self):
-        np.random.shuffle(self.__unsized_data_set)
+        
+        if self.shuffle:
+            np.random.shuffle(self.__unsized_data_set)
         
         to_remove = len(self.__unsized_data_set) % self.batch_size
         if to_remove != 0:
