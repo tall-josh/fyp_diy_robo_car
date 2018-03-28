@@ -24,9 +24,9 @@ def get_paths_glob(path_to_dir):
     try:
         assert(len(paths) > 0)
     except AssertionError as e:
-       e.args += (" :-( ERROR!!! --> {} is not a path or the dir \
+        e.args += (" :-( ERROR!!! --> {} is not a path or the dir \
                  is empty.".format(path_to_dir),)
-       raise
+        raise
     return paths
 
 '''Load all images and annotations from list of paths'''

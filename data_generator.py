@@ -83,5 +83,10 @@ class DataGenerator():
             annos.append(anno)
         
         self.current_step += 1
-        return np.expand_dims(images, axis=3), annos
+        
+        # if gray scale add single channel dim
+        if len(np.shape(images)) == 3:
+            images = np.expand_dims(images, axis=3)
+            
+        return images, annos
 

@@ -1,111 +1,54 @@
 import tensorflow as tf
-from tensorflow.contrib import layers
+from tensorflow.python.layers.core import dense, dropout, flatten
+from tensorflow.python.layers.convolutional import conv2d
+from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer as xavier
 from tqdm import trange, tqdm
 import numpy as np
 from show_graph import show_graph
 
 class Model:
-    def __init__(self, num_bins=8):
+    def __init__(self, name, in_shape, num_bins=15):
         tf.reset_default_graph()
-        self.num_bins = num_bins
-        self.x = tf.placeholder(tf.float32, shape=(None, 80,80,1), name="input")
+        self.x = tf.placeholder(tf.float32, shape=(None,)+in_shape, name="input")
         self.y = tf.placeholder(tf.int32, shape=(None,), name="label")
         self.training = tf.placeholder(tf.bool, name="training")
-        # used for calculating average of predicted distribution 
+        self.num_bins = num_bins
         self.classes = tf.constant(list(range(0,self.num_bins)), dtype=tf.float32, name="classes")
+        self.name = name
+        
+        relu    = tf.nn.relu
         with tf.name_scope("encoder"):
-            with tf.name_scope("enc1"):
-                filt_num    = 10
-                filt_size   = (8,8)
-                filt_stride = (2, 2)  # (Height, Width)
-                padding     = "same"
-                activation  = tf.nn.relu
-                # xavier initializer by default :-)
-                self.enc1 = layers.conv2d(self.x,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay1")
+            #            input   num  conv   stride   pad
+            enc = conv2d(self.x, 24,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc1")
+            enc = conv2d( enc,   32,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc2")
+            enc = conv2d( enc,   64,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc3")
+            enc = conv2d( enc,   64,  (3,3), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc4")
+            enc = conv2d( enc,   64,  (3,3), (1,1),  "same", activation=relu, kernel_initializer=xavier(), name="enc5")
+            enc = flatten(enc)
+            #             in   num  
+            enc = dense(  enc, 100, activation=relu, kernel_initializer=xavier(), name="enc6")
+            enc = dropout(enc, rate=0.1, training=self.training)
 
-            with tf.name_scope("enc2"):
-                filt_num    = 20
-                filt_size   = (4,4)
-                filt_stride = (2, 2)
-                padding     = "same"
-                activation  = tf.nn.relu
+            enc = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="enc7")
+            enc = dropout(enc, rate=0.1, training=self.training)
+            
+            self.logits = dense(enc, 15, activation=None, kernel_initializer=xavier(), name="logits")
+            self.steering = tf.nn.softmax(self.logits, name="steering")
 
-                self.enc2 = layers.conv2d(self.enc1,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay2")
-
-            with tf.name_scope("enc3"):
-                filt_num    = 40
-                filt_size   = (2,2)
-                filt_stride = (1, 1)
-                padding     = "same"
-                activation  = tf.nn.relu
-
-                self.enc3 = layers.conv2d(self.enc2,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay3")
-                self.enc3_flat = layers.flatten(self.enc3)
-
-            with tf.name_scope("enc4"):
-                neurons = 1600
-                activation  = tf.nn.relu
-                dropout_rate = 0.6
-
-                self.enc4 = layers.fully_connected(self.enc3_flat, neurons, activation_fn=activation, scope="enc4")
-                self.enc4_drop = tf.layers.dropout(self.enc4, rate=dropout_rate, training=self.training, name="enc4_drop")
-
-            with tf.name_scope("enc5"):
-                neurons = 160
-                activation  = tf.nn.relu
-                dropout_rate = 0.6
-
-                self.enc5 = layers.fully_connected(self.enc4_drop, neurons, activation_fn=activation, scope="enc5")
-                self.enc5_drop = tf.layers.dropout(self.enc5, rate=dropout_rate, training=self.training, name="enc5_drop")
-
-            with tf.name_scope("embedding"):
-                embedding_dim = self.num_bins
-                activation  = None
-                self.mu layers.dense(self.enc5_drop, embedding_dim, activation=activation)
-                
-                self.log_sigma = layers.dense(self.enc5_drop, embedding_dim, activation=activation)
-                
-                self.epsilon = tf.random_normal(shape=tf.shape(self.mu))
-                self.z     = self.mu + tf.exp(self.log_sigma / 2.) * self.epsilon
-                
-        with tf.name_scope("decoder"):
-            with tf.name_scope("dec5"):
-                neurons = 160
-                activation  = tf.nn.relu
-                dropout_rate = 0.6
-                self.dec5 = layers.fully_connected(self.z, neurons, activation_fn=activation, scope="dec5")
-                self.dec5_drop = tf.layers.dropout(self.dec5, rate=dropout_rate, training=self.training, name="dec5_drop")
-
-            with tf.name_scope("dec4"):
-                neurons = 1600
-                activation  = tf.nn.relu
-                dropout_rate = 0.6
-                self.dec4 = layers.fully_connected(self.dec5_drop, neurons, activation_fn=activation, scope="dec4")
-                self.dec4_drop = tf.layers.dropout(self.dec4, rate=dropout_rate, training=self.training, name="dec4_drop")
-
-            with tf.name_scope("dec3"):
-                pass
-
-            with tf.name_scope("dec2"):
-                pass
-
-            with tf.name_scope("dec1"):
-                pass
-
-            with tf.name_scope("loss"):
-                self.per_class_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y, logits=self.logits, name="class_loss")
-                self.loss = tf.reduce_mean(self.per_class_loss)
-
+        with tf.name_scope("loss"):
+            self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y, logits=self.logits, name="loss")
+            self.loss = tf.reduce_mean(self.loss)
+        
         with tf.name_scope("accuracy"):
             '''
             eg: This is not code, it's more like a derivation
                 just for my own reference.
             classes    = [0,1,2]  # index of steering angle bins
-            probs      = [[0.1, 0.7, 0.2], [0.8, 0.2, 0.0]]
+            steering   = [[0.1, 0.7, 0.2], [0.8, 0.2, 0.0]]
             true       = [1, 0]
             
             Expected value of the pdf output by the softmax opperation
-            prediction = [[0.0, 0.7, 0.4], [0.0, 0.2, 0.0]] # classes * probs
+            prediction = [[0.0, 0.7, 0.4], [0.0, 0.2, 0.0]] # classes * steering
             prediction = [1.1, 0.2] # tf.reduce_sum axis=1 
             
             abs_dif    = [0.1, 0.2]  # abs(true - prediction)
@@ -113,11 +56,13 @@ class Model:
             acc        = 1 - pervent_er
             mean_acc   = tf.reduce_mean(acc)
             '''
-            self.prediction = tf.reduce_sum(tf.multiply(self.probs, self.classes), axis=1)
+            self.prediction = tf.reduce_sum(tf.multiply(self.steering, self.classes), axis=1)
             abs_diff   = tf.abs(self.prediction - tf.cast(self.y, tf.float32))
             percent_error = abs_diff / tf.cast(tf.shape(self.classes), tf.float32)
             self.accuracy   = 1. - percent_error
             self.mean_accuracy = tf.reduce_mean(self.accuracy)
+        
+        self.saver = tf.train.Saver()
     
     
     def Train(self, train_gen=None, test_gen=None, epochs=10, lr=0.001):
@@ -128,7 +73,6 @@ class Model:
         
         optimizer = tf.train.AdamOptimizer(learning_rate=lr)
         train_step = optimizer.minimize(self.loss)
-        self.saver = tf.train.Saver()
         
         self.train_loss = list()
         self.test_loss  = list()
@@ -137,26 +81,30 @@ class Model:
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             best_loss = 10**9  # some big number
+            
+            
             for e in range(epochs):
                 
                 train_gen.reset()
                 print("Epoch {}".format(e+1))
                 print("Training")
                 
-                pbar = tqdm(list(range(train_gen.steps_per_epoch)))
-                for step in pbar:
+                t_train = trange(train_gen.steps_per_epoch)
+                t_train.set_description(f"Epoch {e+1}")
+                for step in t_train:
                     images, annos = train_gen.get_next_batch()
                     _, loss = sess.run([train_step, self.loss], \
                                feed_dict={self.x: images, self.y: annos, self.training: True})
-                    self.train_loss.append(loss)
-                    pbar.set_description("Train Loss: {:.3}".format(loss))
+                    self.train_loss.append(self.loss)
+                    t_train.set_description("Train Loss: {:.3}".format(loss))
                 
                 test_gen.reset()
                 cur_test_loss = []
                 cur_test_acc  = []
-                print("Testing")
-                pbar = tqdm(list(range(test_gen.steps_per_epoch)))
-                for _ in trange(test_gen.steps_per_epoch):
+                
+                t_test = trange(test_gen.steps_per_epoch)
+                t_test.set_description('Testing')
+                for _ in t_test:
                     images, annos = test_gen.get_next_batch()
                     loss, acc = sess.run([self.loss, self.mean_accuracy], \
                            feed_dict={self.x: images, self.y: annos, self.training: False})
@@ -184,7 +132,7 @@ class Model:
         with tf.Session() as sess:
             self.saver.restore(sess,checkpoint_path)
         #     self.saver.restore(sess,'./ep_10-step_3800-loss_1.2003761529922485.ckpt')
-            return sess.run([self.probs, self.prediction], feed_dict={self.x:images, self.training: False})
+            return sess.run([self.steering, self.prediction], feed_dict={self.x:images, self.training: False})
        
     
 #    def Predict_Batch(self, images, checkpoint_path):
