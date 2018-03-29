@@ -19,26 +19,8 @@ def extract_binary_encoding(image, rois, h=3, w=4):
     return number, binary_string
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--in-path', type=str, required=True,
-                        help='Path to video')
-    parser.add_argument('--out-w', type=float, required=False, default=None,
-                        help='output width image. If None, then original width is used.')
-    parser.add_argument('--out-h', type=float, required=False, default=None,
-                        help='output width image. If None, then original height is used.')
-    parser.add_argument('--out-path', type=str, required=True,
-                        help='Where to save the resulting output.')
-    #parser.add_argument('--to-gray', type=bool, required=False, default=True)
-  # a boolean option
-    parser.add_argument("--to-gray",
-        action="store_true",
-        default=False
-    )
-    args    = parser.parse_args()
-    path    = args.in_path
-    out_path = args.out_path
-    to_gray = args.to_gray
+def split_video_and_process_frames(path, out_path, out_w, out_h, to_gray=False):
+
     try:
         assert os.path.exists(out_path), " :-( --- {} is not a path you drongo!".format(out_path)
     except AssertionError as e:
@@ -65,8 +47,6 @@ def main():
             img_cropped = image[40:,:]
             orig_h      = img_cropped.shape[:2][0]
             orig_w      = img_cropped.shape[:2][1]
-            out_h       = args.out_h if args.out_h is not None else orig_h
-            out_w       = args.out_w if args.out_w is not None else orig_w
             x_scale     = out_w / orig_w
             y_scale     = out_h / orig_h
             img_resized = cv2.resize(img_cropped, None, fx=x_scale, fy=y_scale)
@@ -77,14 +57,37 @@ def main():
 
             count += 1
             success,image = vidcap.read()
-            # if count == 5:
-            #     success = False
-            if count%100 == 0:
+            if count%1000 == 0:
                 print("Processed {} frames.".format(count))
 
-        else:
-            print("DANM Dauuug, looks like the file was not read properly.")
-            print("The path you input was:\n{}".format(path))
+        print("You Little Rippa!!!!!!!")
+    else:
+        print("DANM Dauuug, looks like the file was not read properly.")
+        print("The path you input was:\n{}".format(path))
+            
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--in-path', type=str, required=True,
+                        help='Path to video')
+    parser.add_argument('--out-w', type=float, required=False, default=None,
+                        help='output width image. If None, then original width is used.')
+    parser.add_argument('--out-h', type=float, required=False, default=None,
+                        help='output width image. If None, then original height is used.')
+    parser.add_argument('--out-path', type=str, required=True,
+                        help='Where to save the resulting output.')
+    #parser.add_argument('--to-gray', type=bool, required=False, default=True)
+  # a boolean option
+    parser.add_argument("--to-gray",
+        action="store_true",
+        default=False
+    )
+    args    = parser.parse_args()
+    in_path    = args.in_path
+    out_path = args.out_path
+    out_h       = args.out_h if args.out_h is not None else orig_h
+    out_w       = args.out_w if args.out_w is not None else orig_w
+    to_gray = args.to_gray
+    split_video_and_process_frames(in_path, out_path, out_w, out_h, to_gray)
             
 if __name__ == "__main__":
     main()

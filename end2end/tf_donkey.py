@@ -6,7 +6,7 @@ from tqdm import trange, tqdm
 import numpy as np
 from show_graph import show_graph
 
-class Model:
+class Model:    
     def __init__(self, name, in_shape, num_bins=15):
         tf.reset_default_graph()
         self.x = tf.placeholder(tf.float32, shape=(None,)+in_shape, name="input")
@@ -125,6 +125,37 @@ class Model:
 
         print("Done, final best loss: {:.3}".format(best_loss))
 
+    def Evaluate(self, eval_gen, checkpoint_path):
+        eval_gen.reset()
+        
+        results = {}
+        threshholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8. 0.9, 1.0]
+        tp = 0
+        fp = 0
+        fn = 0
+        
+        with tf.Session() as sess:
+            self.saver.restore(sess,checkpoint_path)
+            for thresh in threshholds:
+                t = trange(eval_gen.steps_per_epoch)
+                t.set_description(f"Threshhold: {thresh:.1}")
+                for step in t:
+                    images, annos = eval_gen.get_next_batch()
+                    probs, preds = sess.run([car_brain.steering, car_brain.prediction], feed_dict={car_brain.x:images, car_brain.training: False})
+                    for prob, anno in zip(probs, annos):
+                        choice = max(prob)
+                        if prob(choice) < thresh:
+                            # False Neg
+                            fn += 1
+                        elif choice == anno:
+                            # True Pos
+                            tp += 1
+                        else:
+                            # False Pos
+                            fp += 1
+                            
+                results[thresh] = {"fn": fn, "tp": tp, "fp": fp}
+        
     def TrainingResults(self):
         return self.train_loss, self.test_loss, self.test_acc
     
