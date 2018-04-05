@@ -1,37 +1,50 @@
 import cv2
 import argparse
 import os
-import re
-from sorting import *
+import numpy as np
 
-parser = argparse.ArgumentParser(description='Takes an --in-dir containing \
-a sequence of images. Subtracts one image from another spaced --stride appart\
-and saves is --out-dir.')
-parser.add_argument('--in-dir', type=str,
-                    help='dir containing a sequence of images.')
-parser.add_argument('--stride', type=int, default=1,
-                    help='number of frames to skip')
-parser.add_argument('--out-dir', type=str,
-                    help='Where to save your results.')
-args = parser.parse_args()
 
-base_dir = args.in_dir
-stride   = args.stride
-out_dir  = args.out_dir
+def split_video_and_process_frames(path, out_path, to_gray=False):
 
-im_paths = os.walk(base_dir)
-im_paths = list(next(im_paths))
-im_paths = im_paths[2]
+    try:
+        assert os.path.exists(out_path), " :-( --- {} is not a path you drongo!".format(out_path)
+    except AssertionError as e:
+        print(e)
 
-    
-sort_nicely(im_paths)
-count = 0
-for im0, im1 in zip(im_paths[:-stride:stride], im_paths[stride::stride]):
-  print("{} - {}".format(im1, im0))
-  image0 = cv2.imread(os.path.join(*[base_dir, im0]))
-  image1 = cv2.imread(os.path.join(*[base_dir, im1]))
-  diff   = image0 - image1
-  diff[diff<0] = 0
-  print("{}, {}, {}".format(image1[100,100], image0[100,100], diff[100,100]))
-  cv2.imwrite(os.path.join(*[out_dir, "diff{}.jpg".format(count)]), diff)
-  count += 1
+    vidcap = cv2.VideoCapture(path)
+    success, image = vidcap.read()
+    count = 0
+    if success:
+        while success:
+
+            if to_gray:
+                image    = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                
+            cv2.imwrite("{}/frame{:06}.jpg".format(out_path, count), image)
+            count += 1
+            success,image = vidcap.read()
+            if count%1000 == 0:
+                print("Processed {} frames.".format(count))
+        print("You Little Rippa!!!!!!!")
+    else:
+        print("DANM Dauuug, looks like the file was not read properly.")
+        print("The path you input was:\n{}".format(path))
+            
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--in-path', type=str, required=True,
+                        help='Path to video')
+    parser.add_argument('--out-path', type=str, required=True,
+                        help='Where to save the resulting output.')
+    parser.add_argument("--to-gray",
+        action="store_true",
+        default=False
+    )
+    args    = parser.parse_args()
+    in_path    = args.in_path
+    out_path = args.out_path
+    to_gray = args.to_gray
+    split_video_and_process_frames(in_path, out_path, to_gray)
+            
+if __name__ == "__main__":
+    main()
