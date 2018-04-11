@@ -1,3 +1,4 @@
+
 import time
 import socket
 import cv2
@@ -14,21 +15,13 @@ sys.path.append('..')
 from metrics import Metrics
 
 class Model:
-    def __init__(self, save_dir, in_shape, classes):
+    def __init__(self, in_shape, classes):
         '''
-        save_dir: The name given to the network, this will be used in conjunction
-                  with 'in_shape' and 'classes' to create a directory to save the
-                  model checkpoints.
-        in_shape: Shape of the input data being passed to the network, [rows, cols, channels]
-
         classes:  List of class names or integers corrisponding to each class being classified
                   by the network. ie: ['left', 'straight', 'right'] or [0, 1, 2]
         '''
         print(f"in_shape:           {in_shape}")
         print(f"classes:             {classes}")
-
-        # Make unique directory to save checkpoints
-        self.save_dir = save_dir
 
         # Define classes
         self.num_bins = len(classes)
@@ -81,8 +74,8 @@ class Model:
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             best_loss = 10**9  # some big number
-            
-            
+
+
             for e in range(epochs):
                 temp_train_loss = []
                 train_gen.reset()
@@ -91,7 +84,7 @@ class Model:
                 for step in t_train:
                     images, annos = train_gen.get_next_batch()
                     _, loss = sess.run([train_step, self.loss],
-                               feed_dict={self.x: images, self.y: annos, self.training: True})
+                               feed_dict={self.x: images, self.y: annos['steering'], self.training: True})
                     temp_train_loss.append(loss)
 
                 self.train_loss.append(np.mean(temp_train_loss))
@@ -103,7 +96,7 @@ class Model:
                 for _ in t_test:
                     images, annos = test_gen.get_next_batch()
                     loss = sess.run(self.loss,
-                           feed_dict={self.x: images, self.y: annos, self.training: False})
+                           feed_dict={self.x: images, self.y: annos['steering'], self.training: False})
                     batch_test_loss.append(loss)
 
                 cur_mean_loss = np.mean(batch_test_loss)
@@ -117,22 +110,35 @@ class Model:
                         best_ckpt = self.saver.save(sess, path)
                         print("Model saved at {}".format(best_ckpt))
 
-        self.SaveLossPlots()
+        self.SaveLossPlots(save_dir)
         print(f"Done, final best loss: {best_loss:0.3}")
         return best_ckpt
-    
-    def SaveLossPlots(self):
+
+    def SaveLossPlots(self, save_dir):
+        #line_up, = plt.plot([1,2,3], label='Line 2')
+        #line_down, = plt.plot([3,2,1], label='Line 1')
+        #plt.legend(handles=[line_up, line_down])
+        import matplotlib.pyplot as plt
         print(f"Train: {self.train_loss}")
         print(f"Test:  {self.test_loss}")
-    
+        fig = plt.figure(figsize=(8,6))
+        _tr = plt.plot(self.train_loss, 'b-',  label="train")
+        _te = plt.plot(self.test_loss,  'r--', label="test")
+        plt.title(f'Loss during training')
+        plt.xlabel("Loss")
+        plt.ylabel("Epoch")
+        plt.legend()
+        path = os.path.join(save_dir, f"training_loss.jpg")
+        fig.savefig(path)
+
     def Evaluate(self, eval_gen, checkpoint_path, save_figs=False, save_dir=None):
-        
+
         if save_figs:
             assert save_dir is not None, "If you want to save the evaluation figs, you'll need to provide a save_dir."
-            
+
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-            
+
         eval_gen.reset(shuffle=False)
         metrics = Metrics(self.classes)
         with tf.Session() as sess:
@@ -144,16 +150,16 @@ class Model:
                 images, annos = eval_gen.get_next_batch()
                 steering_probs, expected_bin = sess.run([self.steering_probs, self.expected_bin],
                            feed_dict={self.x: images, self.training: False})
-                metrics.update(steering_probs, expected_bin, annos)
-                
+                metrics.update(steering_probs, expected_bin, annos['steering'])
+
         result = metrics.compute_metrics()
-        
+
         if save_figs:
             metrics.SaveEvalFigs(result, save_dir)
-            
+
         return result
 
-    
+
     def TrainingResults(self):
         return self.train_loss, self.test_loss, self.test_acc
 
@@ -182,7 +188,6 @@ class Model:
 
     def VideoDrive(self, checkpoint_path, video_path,
                    car_ip, pwm_min_max=(-0.5, 0.5), port=5555, steering_range_deg=40):
-
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((car_ip, port))
         with tf.Session() as sess:
@@ -209,7 +214,7 @@ class Model:
                     print("pwm: {}".format(pwm))
                     s.sendall(str.encode(pwm))
                     success, image = vidcap.read()
-                    time.sleep(0.02)
+                    time.sleep(0.10)
             except KeyboardInterrupt:
                     s.close()
                     print("Closed, by user")

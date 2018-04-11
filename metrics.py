@@ -7,7 +7,7 @@ import os
 
 class Metrics():
     
-    def __init__(self, classes):
+    def __init__(self, classes, ):
         '''
         classes   = list of classes ie: ["dog", "cat", "rat"]
                                     or: [0, 1, 2]
@@ -21,6 +21,7 @@ class Metrics():
         self.probs  = []
         # Expected value from the prob distribution
         self.expected_bins = []
+        # Actual steering values (0 - 1023)
                         
     def update(self, probs, expected_bins, annos):
         assert len(probs) == len(annos), "Number of predictions and labels must match."
@@ -119,22 +120,13 @@ class Metrics():
         preds = metrics["predictions"]
         annos = metrics["annotations"]
         fig = plt.figure(figsize=(8,6))
-        plt.plot(preds, annos, 'b.')
-        plt.title(f'Prediction vs Annotation')
-        plt.xlabel("predictions")
-        plt.ylabel("annotations")
+        plt.plot(annos, preds, 'b.')
+        plt.title(f'Annotation vs Prediction')
+        plt.xlabel("annotations")
+        plt.ylabel("predictions")
         path = os.path.join(save_dir, f"prediction_vs_annotation.jpg")
         fig.savefig(path)
         
-        # Predicted vs Label time series
-        #fig = plt.figure(figsize=(8,6))
-        #start = 0
-        #plt.plot(preds, annos, 'b.')
-        #plt.title(f'Prediction vs Annotation')
-        #plt.xlabel("predictions")
-        #plt.ylabel("annotations")
-        #path = os.path.join(save_dir, f"prediction_vs_annotation.jpg")
-        #fig.savefig(path)
         
         
         

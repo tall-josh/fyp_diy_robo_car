@@ -3,8 +3,9 @@ import glob
 import numpy as np
 import matplotlib.image as matimg
 import random
-import csv
+import json
 import io
+import csv
 from tqdm import trange, tqdm
 
 '''load a single image'''
@@ -14,8 +15,8 @@ def load_image(path):
 
 '''load a single annotation'''
 def load_anno(path):
-    anno = np.genfromtxt(path, delimiter=', ',
-                        names=('name', 'throttle', 'steering'))
+    with open(path, 'r') as f:
+        anno = json.load(f)
     return anno
 
 '''get a collection of paths from a directory'''
@@ -30,14 +31,11 @@ def get_paths_glob(path_to_dir):
     return paths
 
 '''Load all images and annotations from list of paths'''
-def load_samples(im_paths, ano_paths):
-    ims  = []
-    annos = []
-    for im, ano in zip(im_paths, ano_paths):
-        ims.append(load_image(im))
-        annos.append(load_anno(ano))
-    return ims, annos
-
+def load_sample(image_dir, anno_dir, name):
+    im_path = os.path.join(image_dir, f"{name}.jpg")
+    an_path = os.path.join(anno_dir, f"{name}.json")
+    return load_image(im_path), load_anno(an_path)
+    
 '''load just images from list of paths'''
 def load_images(im_paths):
     ims  = []
@@ -57,12 +55,12 @@ def get_data_point_name(data_point_path):
 '''
     Loads image and annotatios from data_set_path
 '''
-def load_data(data_set_path):
+def load_dataset(data_set_path):
     data = []
     with open(data_set_path, 'r') as data_set:
         data_reader = csv.reader(data_set, delimiter=',')
-        for name, steering in data_reader:
-            data.append((name, int(steering)))
+        for name in data_reader:
+            data.append(name[0])
     return data
     
     
@@ -71,13 +69,15 @@ def load_data(data_set_path):
   bin_number = data_value // bin_size
   ie: 0 to 14 with 5 bins is 3 elements per bin
 '''
-def bin_steering_annos(data_set, num_bins, val_range=1024):
-    ANNO_IDX = 1
-    result = []
-    bin_size = val_range/num_bins
-    for i,a in data_set:
-        result.append((i, a // bin_size))
-    return result
+def bin_steering_anno(steering_anno, num_bins, val_range=1024):
+    bin_size = val_range / num_bins
+    return steering_anno // bin_size
+    #ANNO_IDX = 1
+    #result = []
+    #bin_size = val_range/num_bins
+    #for i,a in data_set:
+    #    result.append((i, a // bin_size))
+    #return result
     
     # Magic numbers to convert RGB to gray scale
 def rgb2gray(data):
@@ -89,41 +89,29 @@ def rgb2gray(data):
     gray = np.asarray(gray)
     return gray
 
-def get_data_point_names_sequnetial(images_dir, annos_dir, count=None):
+def get_data_point_names_sequnetial(annos_dir, count=None):
     '''
     Loads image and annotation names and checks that all images have an annotation.
     Shuffles names. If count is not None then only count elements will be returned.
     '''
     
-    im_paths = get_paths_glob(os.path.join(images_dir, "*.jpg"))
-    an_paths = get_paths_glob(os.path.join(annos_dir, "*.txt")) 
+    an_paths = get_paths_glob(os.path.join(annos_dir, "*.json")) 
     
     if count is not None:
-        im_paths = im_paths[:count]
         an_paths = an_paths[:count]
     
-    im_names = [get_data_point_name(i) for i in im_paths]
     an_names = [get_data_point_name(i) for i in an_paths]
-    result = list()
-    
+    result = []
+
     #don't worry about this. It just allows me to show a loading bar
     print("Importing images and annotations.")
-    missing_names = list()
-    im_names.sort()
-    pbar = tqdm(list(range(len(im_names)-1)))  
-    for name, _ in zip(im_names, pbar):
-        if name not in an_names:
-            missing_names.append(name)
-        else:
-            anno = load_anno(os.path.join(annos_dir,name+".txt"))
-            steering = anno['steering']
-            result.append({"image_name": name, "steering": steering})
-            
-    try:
-        assert len(missing_names) == 0, "There are images in {} without annotations. {}".format(images_dir, missing_names)
-    except AssertionError as e:
-        print(len(missing_names))
+    an_names.sort()
     
+    pbar = tqdm(list(range(len(an_names)-1)))  
+    for name, _ in zip(an_names, pbar):
+        anno = load_anno(os.path.join(annos_dir,name+".json"))
+        result.append(anno)
+            
     return result
 
 

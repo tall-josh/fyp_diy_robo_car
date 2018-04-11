@@ -2,7 +2,7 @@ import cv2
 import argparse
 import os
 import numpy as np
-
+import json
 
 def extract_binary_encoding(image, rois, h=3, w=4):
     binary_string = ""
@@ -50,10 +50,15 @@ def split_video_and_process_frames(path, out_path, out_w, out_h, to_gray=False):
             x_scale     = out_w / orig_w
             y_scale     = out_h / orig_h
             img_resized = cv2.resize(img_cropped, None, fx=x_scale, fy=y_scale)
-            cv2.imwrite("{}/images/frame{:05}.jpg".format(out_path, count), img_resized)
-            with open("{}/annotations/frame{:05}.txt".format(out_path, count),
-            'a') as f:
-                f.write("frame{:05}, {}, {}\n".format(count, enc_0, enc_1))
+            cv2.imwrite("{}/images/frame{:06d}.jpg".format(out_path, count), img_resized)
+            
+            payload = {}
+            payload["image"] = f"frame{count:06d}"
+            payload["throttle"] = enc_0
+            payload["steering"] = enc_1
+            
+            with open(f"{out_path}/annotations/frame{count:06d}.json", 'w') as f:
+                json.dump(payload, f)
 
             count += 1
             success,image = vidcap.read()

@@ -31,18 +31,14 @@ def main():
     image_dir   = os.path.join(data_dir, "images/")
     anno_dir    = os.path.join(data_dir, "annotations/")
     eval_path   = args.eval_txt
-    
+    num_bins    = config["num_bins"]
     # Load list of image names for train and test
-    raw_eval    = load_data(eval_path)
+    raw_eval    = load_dataset(eval_path)
     
-    # Aggrigate data into bins
-    num_bins    = config['num_bins']
-    eval        = bin_steering_annos(raw_eval, num_bins)
-
     # Create train and test generators
     batch_size  = config['batch_size']
     eval_gen    = DataGenerator(batch_size=batch_size, 
-                      data_set=eval,
+                      data_set=raw_eval,
                       image_dir=image_dir,
                       anno_dir=anno_dir, 
                       num_bins=num_bins)
@@ -52,7 +48,7 @@ def main():
     in_shape    = config['in_shape']
     ckpt        = config['best_ckpt']
     classes     = [i for i in range(num_bins)]
-    car_brain   = Model(save_dir, in_shape, classes=classes)
+    car_brain   = Model(in_shape, classes=classes)
     evaluation  = car_brain.Evaluate(eval_gen, ckpt, save_figs=True, save_dir=os.path.join(save_dir, "eval"))
     
 

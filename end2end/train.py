@@ -32,7 +32,7 @@ def save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, 
     payload["message"]     = message
     path = os.path.join(save_dir, "config.json")
     
-    with open(path, 'a') as f:
+    with open(path, 'w') as f:
         json.dump(payload, f)
     
 
@@ -59,24 +59,21 @@ def main():
     test_path   = args.test_txt
     
     # Load list of image names for train and test
-    raw_train   = load_data(train_path)
-    raw_test    = load_data(test_path)
+    raw_train   = load_dataset(train_path)
+    raw_test    = load_dataset(test_path)
     
-    # Aggrigate data into bins
-    num_bins    = args.num_bins
-    train       = bin_steering_annos(raw_train, num_bins)
-    test        = bin_steering_annos(raw_test, num_bins)
-
+    
     # Create train and test generators
+    num_bins    = args.num_bins
     batch_size  = args.batch_size
     train_gen   = DataGenerator(batch_size=batch_size, 
-                      data_set=train,
+                      data_set=raw_train,
                       image_dir=image_dir,
                       anno_dir=anno_dir, 
                       num_bins=num_bins)
     
     test_gen    = DataGenerator(batch_size=batch_size, 
-                      data_set=test,
+                      data_set=raw_test,
                       image_dir=image_dir,
                       anno_dir=anno_dir, 
                       num_bins=num_bins)
@@ -88,8 +85,8 @@ def main():
     in_shape    = args.shape
     lr          = args.lr
     classes     = [i for i in range(num_bins)]
-    car_brain   = Model(save_dir, in_shape, classes=classes)
-    best_ckpt   = car_brain.Train(train_gen, test_gen, save_dir=save_dir, epochs=epochs) 
+    car_brain   = Model(in_shape, classes=classes)
+    best_ckpt   = car_brain.Train(train_gen, test_gen, save_dir, epochs=epochs) 
     
     message     = args.message    
     save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, best_ckpt,  message)

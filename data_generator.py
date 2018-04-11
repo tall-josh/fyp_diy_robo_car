@@ -58,9 +58,12 @@ class DataGenerator():
         return image, anno
     
     def _all_annotations(self, sort=False):
-        annos = []
-        for _, anno in self.data_set:
-            annos.append(anno)
+        annos  = {"steering": [], "throttle": []}
+        for name in self.data_set:
+            path = os.path.join(self.anno_dir, f"{name}.json")
+            anno = load_anno(path)
+            annos['steering'].append(anno['steering'])
+            annos['throttle'].append(anno['throttle'])
         return annos
     
     def get_next_batch(self):
@@ -71,19 +74,18 @@ class DataGenerator():
         
         i = self.current_step * self.batch_size
         images = []
-        annos  = []
+        annos  = {"steering": [], "throttle": []}
         for ele in range(self.batch_size):
-            im_name, anno = self.data_set[i+ele]
-            image = load_image(self.image_dir + im_name + ".jpg")
-# DEBUGGING random mirror
-#             zeros = np.zeros((80,40))
-#             ones  = np.ones((80,40))
-#             image = np.concatenate((zeros, ones), axis=1)
-#             anno  = 7
+            name = self.data_set[i+ele]
+            image, anno = load_sample(self.image_dir, self.anno_dir, name)
+            steering = bin_steering_anno(anno['steering'], self.num_bins, val_range=1024)
+            throttle = anno['throttle']
             if self.shuffle:
-                image, anno = self.mirror_at_random(image, anno)
+                image, steering = self.mirror_at_random(image, steering)
+                
             images.append(image)
-            annos.append(anno)
+            annos['steering'].append(steering)
+            annos['throttle'].append(throttle)
         
         self.current_step += 1
         

@@ -30,7 +30,7 @@ def main():
     video_path  = args.video_path
     #video_path  = "/home/jp/Documents/FYP/ml/data/videoplayback.mp4"
     num_bins    = args.num_bins
-    in_shape    = (args.vid_h, args.vid_w, args.vid_chan)
+    in_shape    = [args.vid_h, args.vid_w, args.vid_chan]
     car_ip      = args.car_ip
     port        = args.port
     pwm_min_max = (args.pwm_min, args.pwm_max)
