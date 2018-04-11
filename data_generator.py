@@ -21,6 +21,8 @@ class DataGenerator():
         
         if self.shuffle:
             np.random.shuffle(self.__unsized_data_set)
+        else: 
+            self.__unsized_data_set.sort()
         
         to_remove = len(self.__unsized_data_set) % self.batch_size
         if to_remove != 0:
@@ -32,7 +34,8 @@ class DataGenerator():
         else:
             return self.__unsized_data_set[:]
     
-    def reset(self):
+    def reset(self, shuffle=True):
+        self.shuffle=shuffle
         self.data_set = self.size_dataset_to_suit_batch_size()
         self.current_step    = 0
     
@@ -54,7 +57,7 @@ class DataGenerator():
             return (np.flip(image, 1), (self.num_bins-1) - anno)
         return image, anno
     
-    def _all_annotations(self):
+    def _all_annotations(self, sort=False):
         annos = []
         for _, anno in self.data_set:
             annos.append(anno)
