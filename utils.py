@@ -30,8 +30,11 @@ def get_paths_glob(path_to_dir):
         raise
     return paths
 
-'''Load all images and annotations from list of paths'''
 def load_sample(image_dir, anno_dir, name):
+    raise ValueError("Deprecated, now call 'load_image_anno_pair()' ")
+
+'''Load all images and annotations from list of paths'''
+def load_image_anno_pair(image_dir, anno_dir, name):
     im_path = os.path.join(image_dir, f"{name}.jpg")
     an_path = os.path.join(anno_dir, f"{name}.json")
     return load_image(im_path), load_anno(an_path)

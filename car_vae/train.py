@@ -1,7 +1,7 @@
-from tf_donkey import Model
+from vae import Model
 import os
 from utils import *
-from behavoural_data_generator import DataGenerator
+from vae_data_generator import DataGenerator
 import json
 
 '''
@@ -19,11 +19,10 @@ import json
 }
 '''
 
-def save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, best_ckpt, message):
+def save_config(save_dir, data_dir, lr, batch_size, epochs, in_shape, best_ckpt, message):
     payload = {}
 #    payload["name"]        = name
     payload["data_dir"]    = data_dir
-    payload["num_bins"]    = num_bins
     payload["lr"]          = lr
     payload["batch_size"]  = batch_size
     payload["epochs"]      = epochs
@@ -34,10 +33,12 @@ def save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, 
     
     with open(path, 'w') as f:
         json.dump(payload, f)
-    
-'''-----      Behavoural      -----
-Poop
+        
+''' -----       VAE       -----
+
+python train.py --train-txt ../data//evened_train.txt --test-txt ../data/evened_test.txt --save-dir vae_000 --epochs 1 --data-dir ../data/clr_120_160/images/ --shape 120 160 3 --message "test run, totally will not work"
 '''
+
 def main():
     import argparse as argparse
     parser = argparse.ArgumentParser()
@@ -45,7 +46,6 @@ def main():
     parser.add_argument('--test-txt', type=str, required=True)
 #    parser.add_argument('--name', type=str, required=True)
     parser.add_argument('--save-dir', type=str, required=True)
-    parser.add_argument('--num-bins', type=int, required=True)
     parser.add_argument('--lr', type=float, required=False, default = 0.001)
     parser.add_argument('--batch-size', type=int, required=False, default=50)
     parser.add_argument('--epochs', type=int, required=False, default=10)
@@ -55,30 +55,23 @@ def main():
     
     args        = parser.parse_args()
     data_dir    = args.data_dir
-    image_dir   = os.path.join(data_dir, "images/")
-    anno_dir    = os.path.join(data_dir, "annotations/")
     train_path  = args.train_txt
     test_path   = args.test_txt
     
     # Load list of image names for train and test
-    raw_train   = load_dataset(train_path)
-    raw_test    = load_dataset(test_path)
+    train       = load_dataset(train_path)
+    test        = load_dataset(test_path)
     
     
     # Create train and test generators
-    num_bins    = args.num_bins
     batch_size  = args.batch_size
     train_gen   = DataGenerator(batch_size=batch_size, 
-                      data_set=raw_train,
-                      image_dir=image_dir,
-                      anno_dir=anno_dir, 
-                      num_bins=num_bins)
+                      data_set=train[:200],
+                      image_dir=data_dir)
     
     test_gen    = DataGenerator(batch_size=batch_size, 
-                      data_set=raw_test,
-                      image_dir=image_dir,
-                      anno_dir=anno_dir, 
-                      num_bins=num_bins)
+                      data_set=test[:100],
+                      image_dir=data_dir)
     
     # Kick-off
     #name        = args.name
@@ -86,12 +79,11 @@ def main():
     epochs      = args.epochs
     in_shape    = args.shape
     lr          = args.lr
-    classes     = [i for i in range(num_bins)]
-    car_brain   = Model(in_shape, classes=classes)
-    best_ckpt   = car_brain.Train(train_gen, test_gen, save_dir, epochs=epochs) 
+    vae         = Model(in_shape)
+    best_ckpt   = vae.Train(train_gen, test_gen, save_dir, epochs=epochs) 
     
     message     = args.message    
-    save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, best_ckpt,  message)
+    save_config(save_dir, data_dir, lr, batch_size, epochs, in_shape, best_ckpt,  message)
 
 if __name__ == "__main__":
     main()

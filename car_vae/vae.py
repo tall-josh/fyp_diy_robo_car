@@ -1,209 +1,190 @@
+import cv2
 import tensorflow as tf
-from tensorflow.contrib import layers
+from tensorflow.python.layers.core import dense, dropout, flatten
+from tensorflow.python.layers.convolutional import conv2d, conv2d_transpose
+from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer as xavier
 from tqdm import trange, tqdm
 import numpy as np
-from show_graph import show_graph
+import os
+import sys
+sys.path.append('..')
+#from show_graph import show_graph
+from metrics import Metrics
 
 class Model:
-    def __init__(self, embedding_dim=8):
+    def __init__(self, in_shape):
+        '''
+        classes:  List of class names or integers corrisponding to each class being classified
+                  by the network. ie: ['left', 'straight', 'right'] or [0, 1, 2]
+        '''
+        # Define model
         tf.reset_default_graph()
-        self.embedding_dim = embedding_dim
-        self.x = tf.placeholder(tf.float32, shape=(None, 80,80,1), name="input")
-        self.y = tf.placeholder(tf.int32, shape=(None,), name="label")
+        self.x = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="input")
+        self.y = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="label")
         self.training = tf.placeholder(tf.bool, name="training")
-        # used for calculating average of predicted distribution 
-        self.classes = tf.constant(list(range(0,self.num_bins)), dtype=tf.float32, name="classes")
-        with tf.name_scope("encoder"):
-            with tf.name_scope("enc1"):
-                filt_num    = 10
-                filt_size   = (8,8)
-                filt_stride = (2, 2)  # (Height, Width)
-                padding     = "same"
-                activation  = tf.nn.relu
-                # xavier initializer by default :-)
-                self.enc1 = layers.conv2d(self.x,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay1")
-
-            with tf.name_scope("enc2"):
-                filt_num    = 20
-                filt_size   = (4,4)
-                filt_stride = (2, 2)
-                padding     = "same"
-                activation  = tf.nn.relu
-
-                self.enc2 = layers.conv2d(self.enc1,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay2")
-
-            with tf.name_scope("enc3"):
-                filt_num    = 40
-                filt_size   = (2,2)
-                filt_stride = (1, 1)
-                padding     = "same"
-                activation  = tf.nn.relu
-
-                self.enc3 = layers.conv2d(self.enc2,   filt_num, filt_size, filt_stride, padding, activation_fn=activation, scope="lay3")
-                self.enc3_flat = layers.flatten(self.enc3)
-
-            with tf.name_scope("enc4"):
-                neurons = 1600
-                activation  = tf.nn.relu
-                dropout_rate = 0.6
-
-                self.enc4 = layers.fully_connected(self.enc3_flat, neurons, activation_fn=activation, scope="enc4")
-                self.enc4_drop = tf.layers.dropout(self.enc4, rate=dropout_rate, training=self.training, name="enc4_drop")
-
-            with tf.name_scope("enc5"):
-                neurons = 160
-                activation  = tf.nn.relu
-                dropout_rate = 0.6
-
-                self.enc5 = layers.fully_connected(self.enc4_drop, neurons, activation_fn=activation, scope="enc5")
-                self.enc5_drop = tf.layers.dropout(self.enc5, rate=dropout_rate, training=self.training, name="enc5_drop")
-
-            with tf.name_scope("embedding"):
-                embedding_dim = self.embedding_dim
-                activation  = None
-                self.mu layers.dense(self.enc5_drop, embedding_dim, activation=activation)
-                
-                self.log_sigma = layers.dense(self.enc5_drop, embedding_dim, activation=activation)
-                
-                self.epsilon = tf.random_normal(shape=tf.shape(self.mu))
-                self.z     = self.mu + tf.exp(self.log_sigma / 2.) * self.epsilon
-                
-        with tf.name_scope("decoder"):
-            with tf.name_scope("dec5"):
-                neurons = 160
-                activation  = tf.nn.relu
-                dropout_rate = 0.6
-                self.dec5 = layers.fully_connected(self.z, neurons, activation_fn=activation, scope="dec5")
-                self.dec5_drop = tf.layers.dropout(self.dec5, rate=dropout_rate, training=self.training, name="dec5_drop")
-
-            with tf.name_scope("dec4"):
-                neurons = 1600
-                activation  = tf.nn.relu
-                dropout_rate = 0.6
-                self.dec4 = layers.fully_connected(self.dec5_drop, neurons, activation_fn=activation, scope="dec4")
-                self.dec4_drop = tf.layers.dropout(self.dec4, rate=dropout_rate, training=self.training, name="dec4_drop")
-
-            with tf.name_scope("dec3"):
-                pass
-
-            with tf.name_scope("dec2"):
-                pass
-
-            with tf.name_scope("dec1"):
-                pass
-
-            with tf.name_scope("loss"):
-                self.per_class_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y, logits=self.logits, name="class_loss")
-                self.loss = tf.reduce_mean(self.per_class_loss)
-
-        with tf.name_scope("accuracy"):
-            '''
-            eg: This is not code, it's more like a derivation
-                just for my own reference.
-            classes    = [0,1,2]  # index of steering angle bins
-            probs      = [[0.1, 0.7, 0.2], [0.8, 0.2, 0.0]]
-            true       = [1, 0]
-            
-            Expected value of the pdf output by the softmax opperation
-            prediction = [[0.0, 0.7, 0.4], [0.0, 0.2, 0.0]] # classes * probs
-            prediction = [1.1, 0.2] # tf.reduce_sum axis=1 
-            
-            abs_dif    = [0.1, 0.2]  # abs(true - prediction)
-            percent_er = [0.1/3, 0.2/3] # where 3 is the number of classes
-            acc        = 1 - pervent_er
-            mean_acc   = tf.reduce_mean(acc)
-            '''
-            self.prediction = tf.reduce_sum(tf.multiply(self.probs, self.classes), axis=1)
-            abs_diff   = tf.abs(self.prediction - tf.cast(self.y, tf.float32))
-            percent_error = abs_diff / tf.cast(tf.shape(self.classes), tf.float32)
-            self.accuracy   = 1. - percent_error
-            self.mean_accuracy = tf.reduce_mean(self.accuracy)
-    
-    
-    def Train(self, train_gen=None, test_gen=None, epochs=10, lr=0.001):
-        if train_gen is None or test_gen is None:
-            print("This is a lovely message from your Model object's Train function.")
-            print("How can I train if you don't give me data ya ding bat!")
-            return None
+        paddings = tf.constant([[0,0],[4,4],[0,0],[0,0]])
+        relu    = tf.nn.relu
         
+        with tf.name_scope("encoder"):
+            # Padding invector so reconstruction returns to the correct size.                                             h,  w, c
+            x_padded = tf.pad(self.x, paddings, "SYMMETRIC")                                                             #128,160, 3
+            y_padded = tf.pad(self.y, paddings, "SYMMETRIC")
+            # Encoder    in     num   shape  stride    pad                                                              
+            enc = conv2d(x_padded, 24,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc1")# 64, 80,24 
+            enc = conv2d( enc,   32,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc2")# 32, 40,32
+            enc = conv2d( enc,   64,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc3")# 16, 20,64
+            enc = conv2d( enc,   64,  (3,3), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc4")#  8, 10,64
+            enc = conv2d( enc,   64,  (3,3), (1,1),  "same", activation=relu, kernel_initializer=xavier(), name="enc5")#  8, 10,64
+            enc = flatten(enc)
+            #             in   num
+            enc = dense(  enc, 100, activation=relu, kernel_initializer=xavier(), name="enc6")
+            enc = dropout(enc, rate=0.1, training=self.training)
+            
+            # VAE sampling
+            mu        = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="mu")
+            log_sigma = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="log_sigma")
+            z_hat     = tf.random_normal(shape=tf.shape(mu))
+            z         = mu + tf.exp(log_sigma / 2.) * z_hat
+            z         = dropout(z, rate=0.1, training=self.training)
+            
+        with tf.name_scope("decoder"):
+            # Decoder    in           num   
+            dec = dense(     z,       100, activation=relu, kernel_initializer=xavier(), name="dec6")
+            dec = dense(   dec, (8*10*64), activation=relu, kernel_initializer=xavier(), name="dec7")
+            dec  = tf.reshape(dec, (-1,8,10,64))
+            #                        in num  shape  stride   pad    
+            dec  = conv2d_transpose(dec, 64, (3,3), (1,1), "same", activation=relu, name="dec5")
+            dec  = conv2d_transpose(dec, 64, (3,3), (2,2), "same", activation=relu, name="dec4")
+            dec  = conv2d_transpose(dec, 32, (5,5), (2,2), "same", activation=relu, name="dec3")
+            dec  = conv2d_transpose(dec, 24, (5,5), (2,2), "same", activation=relu, name="dec2")
+            dec  = conv2d_transpose(dec, 3,  (5,5), (2,2), "same", activation=relu, name="dec1")
+            
+            # # VAE Loss    
+            # 1. Reconstruction loss: How far did we get from the actual image?
+            rec_loss = tf.reduce_sum(tf.square(y_padded - dec), axis=1)
+            self.rec_loss = tf.reduce_mean(rec_loss)
+
+            # 2. KL-Divergence: How far from the "true" distribution of z's is
+            #                   our parameterised z?
+            kl_loss = tf.reduce_sum( 0.5 * (tf.exp(log_sigma) + tf.square(mu) - 1. - log_sigma) , axis=1)
+            self.kl_loss = tf.reduce_mean(kl_loss)
+            self.loss = self.kl_loss + self.rec_loss
+            
+        self.saver = tf.train.Saver()
+
+    def Train(self, train_gen, test_gen, save_dir, epochs=10, lr=0.001):
+
+        assert_message = "Name must be unique, This will be the name of the dir we'll used to save checkpoints"
+        assert not os.path.exists(save_dir), "{}: {}".format(assert_message, save_dir)
+        os.makedirs(save_dir)
+
         optimizer = tf.train.AdamOptimizer(learning_rate=lr)
         train_step = optimizer.minimize(self.loss)
-        self.saver = tf.train.Saver()
-        
-        self.train_loss = list()
-        self.test_loss  = list()
-        self.test_acc   = list()
 
+        self.train_loss = {"total": [], "kl": [], "rec": []}
+        self.test_loss  = {"total": [], "kl": [], "rec": []}
+        best_ckpt = ""
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            best_loss = 10**9  # some big number
+            best_loss = 10**9.0  # some big number
+
+
             for e in range(epochs):
-                
+                temp_train_loss = []
                 train_gen.reset()
-                print("Epoch {}".format(e+1))
-                print("Training")
-                
-                pbar = tqdm(list(range(train_gen.steps_per_epoch)))
-                for step in pbar:
+                t_train = trange(train_gen.steps_per_epoch)
+                t_train.set_description(f"Training Epoch: {e+1}")
+                for step in t_train:
                     images, annos = train_gen.get_next_batch()
-                    _, loss = sess.run([train_step, self.loss], \
+                    _, loss, rec, kl = sess.run([train_step, self.loss, self.rec_loss, self.kl_loss],
                                feed_dict={self.x: images, self.y: annos, self.training: True})
-                    self.train_loss.append(loss)
-                    pbar.set_description("Train Loss: {:.3}".format(loss))
+                    temp_train_loss.append(np.array([loss, rec, kl]))
+                
+                means = np.mean(np.array(temp_train_loss), axis=0)
+                self.train_loss["total"].append(means[0])
+                self.train_loss["rec"].append( means[1])
+                self.train_loss["kl"].append(  means[2])
+                cur_loss = means[0]
+                print(f"Train Loss: {cur_loss:0.3f}")
                 
                 test_gen.reset()
-                cur_test_loss = []
-                cur_test_acc  = []
-                print("Testing")
-                pbar = tqdm(list(range(test_gen.steps_per_epoch)))
-                for _ in trange(test_gen.steps_per_epoch):
+                temp_test_loss = []
+                t_test = trange(test_gen.steps_per_epoch)
+                t_test.set_description('Testing')
+                for _ in t_test:
                     images, annos = test_gen.get_next_batch()
-                    loss, acc = sess.run([self.loss, self.mean_accuracy], \
+                    loss, rec, kl = sess.run([self.loss, self.rec_loss, self.kl_loss],
                            feed_dict={self.x: images, self.y: annos, self.training: False})
-                    cur_test_loss.append(loss)
-                    cur_test_acc.append(acc)
-                    
-                cur_mean_loss = np.mean(cur_test_loss)
-                cur_mean_acc  = np.mean(cur_test_acc)
-                self.test_loss.append(cur_mean_loss)
-                self.test_acc.append( cur_mean_acc)
+                    temp_test_loss.append(np.array([loss, rec, kl]))
                 
-                print("Test Loss: {:.3f}, Test Acc: {:.3f}".format(cur_mean_loss, cur_mean_acc))
+                means = np.mean(np.array(temp_test_loss), axis=0)
+                self.test_loss["total"].append(means[0])
+                self.test_loss["rec"].append( means[1])
+                self.test_loss["kl"].append(  means[2])                
+                
+                cur_loss = means[0]
+                print(f"Test Loss: {cur_loss:0.3f}")
                 print("-"*50)
-                if cur_mean_loss < best_loss:
-                        best_loss = cur_mean_loss
-                        saved_path = self.saver.save(sess, "./ep_{}-step_{}-loss_{:.3}.ckpt".format(e+1, step,cur_mean_loss))
-                        print("Model saved at {}".format(saved_path))
+                if cur_loss < best_loss:
+                        best_loss = cur_loss
+                        path = f"{save_dir}/ep_{e+1}_loss_{best_loss:0.3f}.ckpt"
+                        best_ckpt = self.saver.save(sess, path)
+                        print("Model saved at {}".format(best_ckpt))
 
-        print("Done, final best loss: {:.3}".format(best_loss))
+        self.SaveLossPlots(save_dir)
+        print(f"Done, final best loss: {best_loss:0.3f}")
+        return best_ckpt
 
+    def SaveLossPlots(self, save_dir):
+        import matplotlib.pyplot as plt
+        import json
+        
+        for loss_type in self.train_loss.keys():
+            # print(f"Train: {self.train_loss}")
+            # print(f"Test:  {self.test_loss}")
+            fig = plt.figure(figsize=(8,6))
+            plt.plot(self.train_loss[loss_type], 'b-',  label="train")
+            plt.plot(self.test_loss[loss_type],  'r--', label="test")
+            plt.title(f'{loss_type} loss during training')
+            plt.xlabel("Loss")
+            plt.ylabel("Epoch")
+            plt.legend()
+            path = os.path.join(save_dir, f"{loss_type}_training_loss.jpg")
+            fig.savefig(path)
+        
+        # self.train_loss["total"] = [str(x) for x in self.train_loss["total"]]
+        # self.train_loss["rec"] = [str(x) for x in self.train_loss["rec"]]
+        # self.train_loss["kl"] = [str(x) for x in self.train_loss["kl"]]
+        # self.test_loss["total"] = [str(x) for x in self.test_loss["total"]]
+        # self.test_loss["rec"] = [str(x) for x in self.test_loss["rec"]]
+        # self.test_loss["kl"] = [str(x) for x in self.test_loss["kl"]]
+        
+        self.train_loss["total"] = [float(x) for x in self.train_loss["total"]]
+        self.train_loss["rec"] = [float(x) for x in self.train_loss["rec"]]
+        self.train_loss["kl"] = [float(x) for x in self.train_loss["kl"]]
+        self.test_loss["total"] = [float(x) for x in self.test_loss["total"]]
+        self.test_loss["rec"] = [float(x) for x in self.test_loss["rec"]]
+        self.test_loss["kl"] = [float(x) for x in self.test_loss["kl"]]
+        
+        with open(os.path.join(save_dir, "train.json"), 'w') as f:
+            json.dump(self.train_loss, f)
+        with open(os.path.join(save_dir, "test.json"), 'w') as f:
+            json.dump(self.test_loss, f)
+'''
+    def Evaluate(self, eval_gen, checkpoint_path, save_figs=False, save_dir=None):
+        pass
+        
     def TrainingResults(self):
-        return self.train_loss, self.test_loss, self.test_acc
-    
+        pass
+        #return self.train_loss, self.test_loss, self.test_acc
+
     def Predict(self, images, checkpoint_path):
-        with tf.Session() as sess:
-            self.saver.restore(sess,checkpoint_path)
-        #     self.saver.restore(sess,'./ep_10-step_3800-loss_1.2003761529922485.ckpt')
-            return sess.run([self.probs, self.prediction], feed_dict={self.x:images, self.training: False})
-       
-    
-#    def Predict_Batch(self, images, checkpoint_path):
-#        preds = list()
-#        with tf.Session() as sess:
-#            self.saver.restore(sess,checkpoint_path)
-        #     saver.restore(sess,'./ep_10-step_3800-loss_1.2003761529922485.ckpt')
-        
-#            preds.append(sess.run(self.prediction,\
-#                                feed_dict={self.x:images, self.training: False}))
-#        return preds
-    
-    def ExpectedBinToDeg(self, expected_bin, steering_range_deg=80):
-        # between 0 and 1
-        norm = expected_bin / self.num_bins
-        # between -0.5 and 0.5
-        zero_cent = norm - 0.5
-        return zero_cent * steering_range_deg
-        
+        pass
+        #with tf.Session() as sess:
+        #    self.saver.restore(sess,checkpoint_path)
+        #    return sess.run([self.steering_probs, self.expected_bin], feed_dict={self.x:images, self.training: False})
+
     def GetGraph(self):
         return tf.get_default_graph().as_graph_def()
-#'./ep_19-step_50-loss_0.5418351888656616.ckpt'
+
+'''
