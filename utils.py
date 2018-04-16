@@ -72,9 +72,9 @@ def load_dataset(data_set_path):
   bin_number = data_value // bin_size
   ie: 0 to 14 with 5 bins is 3 elements per bin
 '''
-def bin_steering_anno(steering_anno, num_bins, val_range=1024):
+def bin_value(value, num_bins, val_range=1024):
     bin_size = val_range / num_bins
-    return steering_anno // bin_size
+    return value // bin_size
     #ANNO_IDX = 1
     #result = []
     #bin_size = val_range/num_bins

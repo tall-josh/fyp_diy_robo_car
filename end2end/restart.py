@@ -19,10 +19,11 @@ import json
 }
 '''
 
-def save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, best_ckpt, message):
+def save_config(save_dir, data_dir, train_txt, test_txt, num_bins, lr, batch_size, epochs, in_shape, best_ckpt, message):
     payload = {}
-#    payload["name"]        = name
     payload["data_dir"]    = data_dir
+    payload["train_txt"]   = train_txt
+    payload["test_txt"]    = test_txt
     payload["num_bins"]    = num_bins
     payload["lr"]          = lr
     payload["batch_size"]  = batch_size
@@ -53,6 +54,9 @@ def main():
     parser.add_argument('--message', type=str, required=True)
 
     args        = parser.parse_args()
+    with open(args.config, 'r') as f:
+       config = json.load(f)
+
     data_dir    = args.data_dir
     image_dir   = os.path.join(data_dir, "images/")
     anno_dir    = os.path.join(data_dir, "annotations/")
@@ -86,17 +90,11 @@ def main():
     in_shape    = args.shape
     lr          = args.lr
     classes     = [i for i in range(num_bins)]
-    message     = args.message
-    
-    assert_message = "Name must be unique, This will be the name of the dir we'll used to save checkpoints"
-    assert not os.path.exists(save_dir), "{}: {}".format(assert_message, save_dir)
-    os.makedirs(save_dir)
-    
-    best_ckpt   = "must have crashed during training :-("
-    save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, best_ckpt,  message)
     car_brain   = Model(in_shape, classes=classes)
     best_ckpt   = car_brain.Train(train_gen, test_gen, save_dir, epochs=epochs)
 
+    message     = args.message
+    save_config(save_dir, data_dir, train_path, test_path, num_bins, lr, batch_size, epochs, in_shape, best_ckpt,  message)
 
 if __name__ == "__main__":
     main()

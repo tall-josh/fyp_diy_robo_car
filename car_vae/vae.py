@@ -57,11 +57,11 @@ class Model:
             dec  = conv2d_transpose(dec, 64, (3,3), (2,2), "same", activation=relu, name="dec4")
             dec  = conv2d_transpose(dec, 32, (5,5), (2,2), "same", activation=relu, name="dec3")
             dec  = conv2d_transpose(dec, 24, (5,5), (2,2), "same", activation=relu, name="dec2")
-            dec  = conv2d_transpose(dec, 3,  (5,5), (2,2), "same", activation=relu, name="dec1")
+            self.dec  = conv2d_transpose(dec, 3,  (5,5), (2,2), "same", activation=relu, name="dec1")
             
             # # VAE Loss    
             # 1. Reconstruction loss: How far did we get from the actual image?
-            rec_loss = tf.reduce_sum(tf.square(y_padded - dec), axis=1)
+            rec_loss = tf.reduce_sum(tf.square(y_padded - self.dec), axis=1)
             self.rec_loss = tf.reduce_mean(rec_loss)
 
             # 2. KL-Divergence: How far from the "true" distribution of z's is
@@ -72,11 +72,17 @@ class Model:
             
         self.saver = tf.train.Saver()
 
+    def Infer(self, images, checkpoint_path, save_dir):
+        with tf.Session() as sess:
+            self.saver.restore(sess, checkpoint_path)
+            reconstructions = sess.run(self.dec, feed_dict={self.x: images, self.training: False})
+            for i, (image, recon) in enumerate(zip(images,reconstructions)):
+                pass
+                # cv2.imwrite(os.path.join(save_dir, f"{i:001}_reconstruction.jpg"), recon)
+                # cv2.imwrite(os.path.join(save_dir, f"{i:001}_original.jpg"), image)
+            return reconstructions, images
+        
     def Train(self, train_gen, test_gen, save_dir, epochs=10, lr=0.001):
-
-        assert_message = "Name must be unique, This will be the name of the dir we'll used to save checkpoints"
-        assert not os.path.exists(save_dir), "{}: {}".format(assert_message, save_dir)
-        os.makedirs(save_dir)
 
         optimizer = tf.train.AdamOptimizer(learning_rate=lr)
         train_step = optimizer.minimize(self.loss)
@@ -87,15 +93,14 @@ class Model:
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             best_loss = 10**9.0  # some big number
-
-
-            for e in range(epochs):
+            # TODO: restart from checkpoint
+            for e in range(epochs): 
                 temp_train_loss = []
                 train_gen.reset()
                 t_train = trange(train_gen.steps_per_epoch)
                 t_train.set_description(f"Training Epoch: {e+1}")
                 for step in t_train:
-                    images, annos = train_gen.get_next_batch()
+                    images, annos  = train_gen.get_next_batch()
                     _, loss, rec, kl = sess.run([train_step, self.loss, self.rec_loss, self.kl_loss],
                                feed_dict={self.x: images, self.y: annos, self.training: True})
                     temp_train_loss.append(np.array([loss, rec, kl]))
@@ -151,26 +156,16 @@ class Model:
             plt.legend()
             path = os.path.join(save_dir, f"{loss_type}_training_loss.jpg")
             fig.savefig(path)
-        
-        # self.train_loss["total"] = [str(x) for x in self.train_loss["total"]]
-        # self.train_loss["rec"] = [str(x) for x in self.train_loss["rec"]]
-        # self.train_loss["kl"] = [str(x) for x in self.train_loss["kl"]]
-        # self.test_loss["total"] = [str(x) for x in self.test_loss["total"]]
-        # self.test_loss["rec"] = [str(x) for x in self.test_loss["rec"]]
-        # self.test_loss["kl"] = [str(x) for x in self.test_loss["kl"]]
-        
-        self.train_loss["total"] = [float(x) for x in self.train_loss["total"]]
-        self.train_loss["rec"] = [float(x) for x in self.train_loss["rec"]]
-        self.train_loss["kl"] = [float(x) for x in self.train_loss["kl"]]
-        self.test_loss["total"] = [float(x) for x in self.test_loss["total"]]
-        self.test_loss["rec"] = [float(x) for x in self.test_loss["rec"]]
-        self.test_loss["kl"] = [float(x) for x in self.test_loss["kl"]]
-        
+            
+            # Need to convet from numpy.float32 to native float32 for serialization
+            self.train_loss[loss_type] = [float(x) for x in self.train_loss[loss_type]]
+            self.test_loss[loss_type]  = [float(x) for x in self.test_loss[loss_type]]
         with open(os.path.join(save_dir, "train.json"), 'w') as f:
             json.dump(self.train_loss, f)
         with open(os.path.join(save_dir, "test.json"), 'w') as f:
             json.dump(self.test_loss, f)
-'''
+
+"""
     def Evaluate(self, eval_gen, checkpoint_path, save_figs=False, save_dir=None):
         pass
         
@@ -187,4 +182,4 @@ class Model:
     def GetGraph(self):
         return tf.get_default_graph().as_graph_def()
 
-'''
+"""

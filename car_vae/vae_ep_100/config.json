@@ -1,0 +1,1 @@
+{"data_dir": "../data/clr_120_160/images/", "train_txt": "../data/evened_train.txt", "test_txt": "../data/evened_test.txt", "lr": 0.001, "batch_size": 250, "epochs": 2, "in_shape": [120, 160, 3], "best_ckpt": "The session must have crashed before finnishing :-(", "message": "dfsdf"}

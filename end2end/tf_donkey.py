@@ -31,9 +31,11 @@ class Model:
         # Define model
         tf.reset_default_graph()
         self.x = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="input")
-        self.y = tf.placeholder(tf.int32, shape=(None,), name="label")
+        self.y_steering = tf.placeholder(tf.int32,   shape=(None,), name="label_steering")
+        self.y_throttle = tf.placeholder(tf.float32, shape=(None,), name="label_throttle")
         self.training = tf.placeholder(tf.bool, name="training")
         relu    = tf.nn.relu
+        sigmoid = tf.nn.sigmoid
         with tf.name_scope("encoder"):
             #            input   num  conv   stride   pad
             enc = conv2d(self.x, 24,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc1")
@@ -49,32 +51,35 @@ class Model:
             enc = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="enc7")
             enc = dropout(enc, rate=0.1, training=self.training)
 
+            # Steering
             self.logits = dense(enc, self.num_bins, activation=None, kernel_initializer=xavier(), name="logits")
             self.steering_probs = tf.nn.softmax(self.logits, name="steering")
             self.expected_bin = tf.reduce_sum(tf.multiply(self.steering_probs, self.classes), axis=1)
 
+            # Throttle
+            self.throttle = dense(enc, 1, sigmoid, kernel_initializer=xavier(), name="throttle")
         with tf.name_scope("loss"):
-            self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y, logits=self.logits, name="loss")
-            self.loss = tf.reduce_mean(self.loss)
+            self.loss_steering = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y_steering, logits=self.logits)
+            self.loss_steering = tf.reduce_mean(self.loss_steering)
+            self.loss_throttle = tf.reduce_mean((self.throttle - self.y_throttle)**2)
+            self.loss = 0.9*self.loss_steering + 0.001*self.loss_throttle
+
 
         self.saver = tf.train.Saver()
 
-    def Train(self, train_gen, test_gen, save_dir, epochs=10, lr=0.001):
-
-        assert_message = "Name must be unique, This will be the name of the dir we'll used to save checkpoints"
-        assert not os.path.exists(save_dir), "{}: {}".format(assert_message, save_dir)
-        os.makedirs(save_dir)
+    def Train(self, train_gen, test_gen, save_dir, epochs=10, lr=0.001, restart_ckpt=None):
 
         optimizer = tf.train.AdamOptimizer(learning_rate=lr)
         train_step = optimizer.minimize(self.loss)
 
-        self.train_loss = []
-        self.test_loss  = []
+        self.train_loss = {"total": [], "steering": [], "throttle" : []}
+        self.test_loss  = {"total": [], "steering": [], "throttle" : []}
         best_ckpt = ""
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
+            if restart_ckpt is not None:
+                self.saver.restore(sess,restart_ckpt)
             best_loss = 10**9  # some big number
-
 
             for e in range(epochs):
                 temp_train_loss = []
@@ -83,11 +88,17 @@ class Model:
                 t_train.set_description(f"Training Epoch: {e+1}")
                 for step in t_train:
                     images, annos = train_gen.get_next_batch()
-                    _, loss = sess.run([train_step, self.loss],
-                               feed_dict={self.x: images, self.y: annos['steering'], self.training: True})
-                    temp_train_loss.append(loss)
+                    _, loss, steer, throt = sess.run([train_step, self.loss, self.loss_steering, self.loss_throttle],
+                               feed_dict={self.x: images,
+                                          self.y_steering: annos['steering'],
+                                          self.y_throttle: annos['throttle'],
+                                          self.training: True})
+                    temp_train_loss.append(np.array([loss, steer, throt]))
 
-                self.train_loss.append(np.mean(temp_train_loss))
+                means = np.mean(np.array(temp_train_loss), axis=0)
+                self.train_loss["total"].append(means[0])
+                self.train_loss["steering"].append(means[1])
+                self.train_loss["throttle"].append(means[2])
                 test_gen.reset()
                 batch_test_loss = []
 
@@ -95,14 +106,21 @@ class Model:
                 t_test.set_description('Testing')
                 for _ in t_test:
                     images, annos = test_gen.get_next_batch()
-                    loss = sess.run(self.loss,
-                           feed_dict={self.x: images, self.y: annos['steering'], self.training: False})
-                    batch_test_loss.append(loss)
+                    loss, steer, throt = sess.run([self.loss, self.loss_steering, self.loss_throttle],
+                           feed_dict={self.x: images,
+                                      self.y_steering: annos['steering'],
+                                      self.y_throttle: annos['throttle'],
+                                      self.training: False})
 
-                cur_mean_loss = np.mean(batch_test_loss)
-                self.test_loss.append(cur_mean_loss)
+                    batch_test_loss.append(np.array([loss, steer, throt]))
 
-                print(f"Test Loss: {cur_mean_loss:0.3f}")
+                print(f"shape: {np.shape(batch_test_loss)}")
+                means = np.mean(np.array(batch_test_loss), axis=0)
+                self.test_loss["total"].append(means[0])
+                self.test_loss["steering"].append(means[1])
+                self.test_loss["throttle"].append(means[2])
+                cur_mean_loss = means[0]
+                print(f"Test Loss: {cur_mean_loss}")
                 print("-"*50)
                 if cur_mean_loss < best_loss:
                         best_loss = cur_mean_loss
@@ -115,21 +133,29 @@ class Model:
         return best_ckpt
 
     def SaveLossPlots(self, save_dir):
-        #line_up, = plt.plot([1,2,3], label='Line 2')
-        #line_down, = plt.plot([3,2,1], label='Line 1')
-        #plt.legend(handles=[line_up, line_down])
         import matplotlib.pyplot as plt
-        print(f"Train: {self.train_loss}")
-        print(f"Test:  {self.test_loss}")
-        fig = plt.figure(figsize=(8,6))
-        _tr = plt.plot(self.train_loss, 'b-',  label="train")
-        _te = plt.plot(self.test_loss,  'r--', label="test")
-        plt.title(f'Loss during training')
-        plt.xlabel("Loss")
-        plt.ylabel("Epoch")
-        plt.legend()
-        path = os.path.join(save_dir, f"training_loss.jpg")
-        fig.savefig(path)
+        import json
+
+        for loss_type in self.train_loss.keys():
+            # print(f"Train: {self.train_loss}")
+            # print(f"Test:  {self.test_loss}")
+            fig = plt.figure(figsize=(8,6))
+            plt.plot(self.train_loss[loss_type], 'b-',  label="train")
+            plt.plot(self.test_loss[loss_type],  'r--', label="test")
+            plt.title(f'{loss_type} loss during training')
+            plt.xlabel("Loss")
+            plt.ylabel("Epoch")
+            plt.legend()
+            path = os.path.join(save_dir, f"{loss_type}_training_loss.jpg")
+            fig.savefig(path)
+
+            # Need to convet from numpy.float32 to native float32 for serialization
+            self.train_loss[loss_type] = [float(x) for x in self.train_loss[loss_type]]
+            self.test_loss[loss_type]  = [float(x) for x in self.test_loss[loss_type]]
+        with open(os.path.join(save_dir, "train.json"), 'w') as f:
+            json.dump(self.train_loss, f)
+        with open(os.path.join(save_dir, "test.json"), 'w') as f:
+            json.dump(self.test_loss, f)
 
     def Evaluate(self, eval_gen, checkpoint_path, save_figs=False, save_dir=None):
 
@@ -148,9 +174,9 @@ class Model:
             t_train.set_description("Evaluating your face!")
             for step in t_train:
                 images, annos = eval_gen.get_next_batch()
-                steering_probs, expected_bin = sess.run([self.steering_probs, self.expected_bin],
+                steering_probs, expected_bin, throttle = sess.run([self.steering_probs, self.expected_bin, self.throttle],
                            feed_dict={self.x: images, self.training: False})
-                metrics.update(steering_probs, expected_bin, annos['steering'])
+                metrics.update(steering_probs, expected_bin, throttle, annos)
 
         result = metrics.compute_metrics()
 

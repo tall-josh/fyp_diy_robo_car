@@ -3,6 +3,7 @@ import csv
 import io
 from utils import *
 from base_data_generator import BaseDataGenerator
+from tqdm import tqdm
 
 '''
 Generator for producing batches of image, annotation pairs for training
@@ -11,10 +12,13 @@ a classifyer style networks.
 class DataGenerator(BaseDataGenerator):
     
     def __init__(self, batch_size, data_set, image_dir, 
-                 anno_dir, num_bins, shuffle=True):
+                 anno_dir, num_bins, shuffle=True, count=None):
         
         super().__init__(batch_size, data_set, image_dir, 
                          anno_dir, shuffle=shuffle)
+        
+        self.data = self.load_all_data(image_dir, anno_dir, data_set)
+            
         self.num_bins = num_bins
     
 
@@ -35,8 +39,21 @@ class DataGenerator(BaseDataGenerator):
             annos['throttle'].append(anno['throttle'])
         return annos
     
+    def load_all_data(self, image_dir, anno_dir, data_set):
+        all_data = []
+        pbar = tqdm(data_set)
+        pbar.set_description("Loading Data")
+        for name in pbar:
+            im, an = load_image_anno_pair(image_dir, anno_dir, name)
+            im = self.normalize_image(im)
+            pair = {}
+            pair["image"]    = im
+            pair["steering"] = an["steering"]
+            pair["throttle"] = an["throttle"]
+            all_data.append(pair)
+        return all_data
+    
     def get_next_batch(self):
-        #print("step {} of {}".format(self.current_step, self.steps_per_epoch))
         if self.current_step == self.steps_per_epoch:
             print("Data source exhausted, re-init DataGenerator")
             return None, None
@@ -44,14 +61,16 @@ class DataGenerator(BaseDataGenerator):
         i = self.current_step * self.batch_size
         images = []
         annos  = {"steering": [], "throttle": []}
+        string = ""
         for ele in range(self.batch_size):
-            name = self.data_set[i+ele]
-            image, anno = load_sample(self.image_dir, self.anno_dir, name)
-            steering = bin_steering_anno(anno['steering'], self.num_bins, val_range=1024)
-            throttle = anno['throttle']
-            if self.shuffle:
-                image, steering = self.augment(image, steering)
-                
+            pair     = self.data[self._indexes[i+ele]]
+            image    = pair["image"]
+            steering = pair["steering"]
+            throttle = pair["throttle"]
+            steering = bin_value(steering, self.num_bins, val_range=1024)
+            throttle = (throttle / 1024) - 0.5 # between +- 0.5
+            
+            image, steering = self.augment(image, steering)
             images.append(image)
             annos['steering'].append(steering)
             annos['throttle'].append(throttle)
