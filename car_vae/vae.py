@@ -41,13 +41,13 @@ class Model:
             self.enc = dropout(self.enc, rate=0.1, training=self.training)
             
             # VAE sampling
-    #        mu        = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="mu")
-    #        log_sigma = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="log_sigma")
-    #        z_hat     = tf.random_normal(shape=tf.shape(mu))
-    #        z         = mu + tf.exp(log_sigma / 2.) * z_hat
-    #        z         = dropout(z, rate=0.1, training=self.training)
-            self.z = dense( self.enc, 50, activation=relu, kernel_initializer=xavier(), name="z")
-            self.z = dropout(self.z,  rate=0.1, training=self.training)
+            mu        = dense(self.enc, 50, activation=relu, kernel_initializer=xavier(), name="mu")
+            log_sigma = dense(self.enc, 50, activation=relu, kernel_initializer=xavier(), name="log_sigma")
+            z_hat     = tf.random_normal(shape=tf.shape(mu))
+            self.z    = mu + tf.exp(log_sigma / 2.) * z_hat
+            self.z    = dropout(self.z, rate=0.1, training=self.training)
+    #        self.z = dense( self.enc, 50, activation=relu, kernel_initializer=xavier(), name="z")
+    #        self.z = dropout(self.z,  rate=0.1, training=self.training)
             
         with tf.name_scope("decoder"):
             # Decoder    in           num   
@@ -68,10 +68,9 @@ class Model:
 
             # 2. KL-Divergence: How far from the "true" distribution of z's is
             #                   our parameterised z?
-#           self.kl_loss = tf.reduce_sum( 0.5 * (tf.exp(log_sigma) + tf.square(mu) - 1. - log_sigma) , axis=1)
-#           self.kl_loss = tf.reduce_mean(self.kl_loss)
-            self.kl_loss = tf.constant(0)
-            self.loss =  self.rec_loss 
+            self.kl_loss = tf.reduce_sum( 0.5 * (tf.exp(log_sigma) + tf.square(mu) - 1. - log_sigma) , axis=1)
+            self.kl_loss = tf.reduce_mean(self.kl_loss)
+            self.loss =  self.rec_loss + self.kl_loss
             
         self.saver = tf.train.Saver()
 
