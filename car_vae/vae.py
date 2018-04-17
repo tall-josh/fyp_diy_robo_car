@@ -30,45 +30,48 @@ class Model:
             x_padded = tf.pad(self.x, paddings, "SYMMETRIC")                                                             #128,160, 3
             y_padded = tf.pad(self.y, paddings, "SYMMETRIC")
             # Encoder    in     num   shape  stride    pad                                                              
-            enc = conv2d(x_padded, 24,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc1")# 64, 80,24 
-            enc = conv2d( enc,   32,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc2")# 32, 40,32
-            enc = conv2d( enc,   64,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc3")# 16, 20,64
-            enc = conv2d( enc,   64,  (3,3), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc4")#  8, 10,64
-            enc = conv2d( enc,   64,  (3,3), (1,1),  "same", activation=relu, kernel_initializer=xavier(), name="enc5")#  8, 10,64
-            enc = flatten(enc)
+            self.enc = conv2d(x_padded, 24,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc1")# 64, 80,24 
+            self.enc = conv2d( self.enc,   32,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc2")# 32, 40,32
+            self.enc = conv2d( self.enc,   64,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc3")# 16, 20,64
+            self.enc = conv2d( self.enc,   64,  (3,3), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc4")#  8, 10,64
+            self.enc = conv2d( self.enc,   64,  (3,3), (1,1),  "same", activation=relu, kernel_initializer=xavier(), name="enc5")#  8, 10,64
+            self.enc = flatten(self.enc)
             #             in   num
-            enc = dense(  enc, 100, activation=relu, kernel_initializer=xavier(), name="enc6")
-            enc = dropout(enc, rate=0.1, training=self.training)
+            self.enc = dense(  self.enc, 100, activation=relu, kernel_initializer=xavier(), name="enc6")
+            self.enc = dropout(self.enc, rate=0.1, training=self.training)
             
             # VAE sampling
-            mu        = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="mu")
-            log_sigma = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="log_sigma")
-            z_hat     = tf.random_normal(shape=tf.shape(mu))
-            z         = mu + tf.exp(log_sigma / 2.) * z_hat
-            z         = dropout(z, rate=0.1, training=self.training)
+    #        mu        = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="mu")
+    #        log_sigma = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="log_sigma")
+    #        z_hat     = tf.random_normal(shape=tf.shape(mu))
+    #        z         = mu + tf.exp(log_sigma / 2.) * z_hat
+    #        z         = dropout(z, rate=0.1, training=self.training)
+            self.z = dense( self.enc, 50, activation=relu, kernel_initializer=xavier(), name="z")
+            self.z = dropout(self.z,  rate=0.1, training=self.training)
             
         with tf.name_scope("decoder"):
             # Decoder    in           num   
-            dec = dense(     z,       100, activation=relu, kernel_initializer=xavier(), name="dec6")
-            dec = dense(   dec, (8*10*64), activation=relu, kernel_initializer=xavier(), name="dec7")
-            dec  = tf.reshape(dec, (-1,8,10,64))
+            self.dec = dense( self.z,       100, activation=relu, kernel_initializer=xavier(), name="dec6")
+            self.dec = dense( self.dec, (8*10*64), activation=relu, kernel_initializer=xavier(), name="dec7")
+            self.dec  = tf.reshape(self.dec, (-1,8,10,64))
             #                        in num  shape  stride   pad    
-            dec  = conv2d_transpose(dec, 64, (3,3), (1,1), "same", activation=relu, name="dec5")
-            dec  = conv2d_transpose(dec, 64, (3,3), (2,2), "same", activation=relu, name="dec4")
-            dec  = conv2d_transpose(dec, 32, (5,5), (2,2), "same", activation=relu, name="dec3")
-            dec  = conv2d_transpose(dec, 24, (5,5), (2,2), "same", activation=relu, name="dec2")
-            self.dec  = conv2d_transpose(dec, 3,  (5,5), (2,2), "same", activation=relu, name="dec1")
+            self.dec  = conv2d_transpose(self.dec, 64, (3,3), (1,1), "same", activation=relu, name="dec5")
+            self.dec  = conv2d_transpose(self.dec, 64, (3,3), (2,2), "same", activation=relu, name="dec4")
+            self.dec  = conv2d_transpose(self.dec, 32, (5,5), (2,2), "same", activation=relu, name="dec3")
+            self.dec  = conv2d_transpose(self.dec, 24, (5,5), (2,2), "same", activation=relu, name="dec2")
+            self.dec  = conv2d_transpose(self.dec, 3,  (5,5), (2,2), "same", activation=relu, name="dec1")
             
             # # VAE Loss    
             # 1. Reconstruction loss: How far did we get from the actual image?
-            rec_loss = tf.reduce_sum(tf.square(y_padded - self.dec), axis=1)
-            self.rec_loss = tf.reduce_mean(rec_loss)
+            self.rec_loss = tf.reduce_sum(tf.square(y_padded - self.dec), axis=1)
+            self.rec_loss = tf.reduce_mean(self.rec_loss)
 
             # 2. KL-Divergence: How far from the "true" distribution of z's is
             #                   our parameterised z?
-            kl_loss = tf.reduce_sum( 0.5 * (tf.exp(log_sigma) + tf.square(mu) - 1. - log_sigma) , axis=1)
-            self.kl_loss = tf.reduce_mean(kl_loss)
-            self.loss = self.kl_loss + self.rec_loss
+#           self.kl_loss = tf.reduce_sum( 0.5 * (tf.exp(log_sigma) + tf.square(mu) - 1. - log_sigma) , axis=1)
+#           self.kl_loss = tf.reduce_mean(self.kl_loss)
+            self.kl_loss = tf.constant(0)
+            self.loss =  self.rec_loss 
             
         self.saver = tf.train.Saver()
 
@@ -142,6 +145,7 @@ class Model:
 
     def SaveLossPlots(self, save_dir):
         import matplotlib.pyplot as plt
+        plt.switch_backend('agg')
         import json
         
         for loss_type in self.train_loss.keys():
