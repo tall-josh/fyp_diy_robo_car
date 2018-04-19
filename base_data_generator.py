@@ -7,7 +7,7 @@ from tqdm import trange
 class BaseDataGenerator():
     
     def __init__(self, batch_size, data_set, image_dir, anno_dir=None, shuffle=True):
-        self.data_set     = data_set
+        self.data_set        = data_set
         self.batch_size      = batch_size
         self.image_dir       = image_dir
         self.anno_dir        = anno_dir if anno_dir is not None else image_dir
@@ -18,11 +18,14 @@ class BaseDataGenerator():
         self.reset(shuffle)
         
     def reset(self, shuffle=True):
-        np.random.shuffle(self._indexes)
+        if shuffle:
+            np.random.shuffle(self._indexes)
+        else:
+            self._indexes = list(range(len(self.data_set)))
         self.current_step    = 0
     
     def normalize_image(self, image):
-        image = ((image / 255) - 0.5) * 2
+        image = (image / 255.0)
         return image
     
     def augment(self, image, anno):

@@ -117,6 +117,10 @@ def get_data_point_names_sequnetial(annos_dir, count=None):
             
     return result
 
+def save_images(image_list, names, save_dir):
+    for image, name in zip(image_list, names):
+        path = os.path.join(save_dir, name+".jpg")
+        matimg.imsave(path, image)
 
 '''def check_input_image_dimentions_equal(dataset, known_shape=None):
     shape = known_shape if known_shape is not None else np.shape(dataset[0])

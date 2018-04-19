@@ -44,16 +44,23 @@ python train.py --train-txt ../data//evened_train.txt --test-txt ../data/evened_
 def main():
     import argparse as argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train-txt', type=str, required=True)
-    parser.add_argument('--test-txt', type=str, required=True)
-#    parser.add_argument('--name', type=str, required=True)
-    parser.add_argument('--save-dir', type=str, required=True)
-    parser.add_argument('--lr', type=float, required=False, default = 0.001)
-    parser.add_argument('--batch-size', type=int, required=False, default=50)
-    parser.add_argument('--epochs', type=int, required=False, default=10)
+    parser.add_argument('--train-txt', type=str, required=True, 
+                        help="Path to list of training example names.")
+    parser.add_argument('--test-txt', type=str, required=True, 
+                        help="Path to list of test example names.")
+    parser.add_argument('--save-dir', type=str, required=True, 
+                        help="Directory you wish to save training results to. This must be unique and will be created for you at run time. ")
+    parser.add_argument('--lr', type=float, required=False, default = 0.001, 
+                        help="Learning rate.")
+    parser.add_argument('--batch-size', type=int, required=False, default=50, 
+                        help="Number of samples fed into the network at one time.")
+    parser.add_argument('--epochs', type=int, required=False, default=10,
+                       help="Number of times the network looks at all the data.")
     parser.add_argument('--data-dir', type=str, required=True)
-    parser.add_argument('--shape', type=int, required=True, nargs=3, help="height width chanels")
-    parser.add_argument('--message', type=str, required=True)
+    parser.add_argument('--shape', type=int, required=False, nargs=3, default = [120, 160, 3], 
+                        help="height width chanels")
+    parser.add_argument('--message', type=str, required=True,
+                       help="an reminder or other data you may need to identify the training run later.")
 
     args        = parser.parse_args()
     data_dir    = args.data_dir
@@ -68,12 +75,17 @@ def main():
     # Create train and test generators
     batch_size  = args.batch_size
     train_gen   = DataGenerator(batch_size=batch_size,
-                      data_set=train,
+                      data_set=train[:100],
                       image_dir=data_dir)
 
     test_gen    = DataGenerator(batch_size=batch_size,
-                      data_set=test,
+                      data_set=test[:50],
                       image_dir=data_dir)
+    
+    sample_gen  = DataGenerator(batch_size=10,
+                      data_set=test[:10],
+                      image_dir=data_dir,
+                      shuffle=False)
 
     # Save the config to a file
     epochs      = args.epochs
@@ -89,7 +101,8 @@ def main():
 
     # Kick-off
     vae         = Model(in_shape)
-    best_ckpt   = vae.Train(train_gen, test_gen, save_dir, epochs=epochs)
+    best_ckpt   = vae.Train(train_gen, test_gen, save_dir, 
+                            epochs=epochs, lr=lr, sample_inf_gen=sample_gen)
     save_config(save_dir, data_dir, train_path, test_path, lr, batch_size, epochs, in_shape, best_ckpt,  message)
 
 if __name__ == "__main__":

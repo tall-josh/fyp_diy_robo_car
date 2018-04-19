@@ -35,10 +35,10 @@ class DataGenerator(BaseDataGenerator):
         for name in pbar:
             im = load_image(os.path.join(image_dir, name+".jpg"))
             im = self.normalize_image(np.array(im))
-            #im = self.normalize_image(im)
             pair = {}
             pair["original_image"]     = im
             pair["augmented_image"]    = im
+            pair["name"]               = name
             # To Do, add noisy image or something
             # pari["augmented_image"] = self.augment(im)
             all_data.append(pair)
@@ -52,14 +52,17 @@ class DataGenerator(BaseDataGenerator):
         i = self.current_step * self.batch_size
         images = []
         annos  = []
+        names  = []
         string = ""
         for ele in range(self.batch_size):
             pair     = self.data[self._indexes[i+ele]]
             image    = pair["original_image"]
             anno     = pair["augmented_image"]
+            name     = pair["name"]
             
             images.append(image)
             annos.append(anno)
+            names.append(name)
         
         self.current_step += 1
         
@@ -68,5 +71,5 @@ class DataGenerator(BaseDataGenerator):
             images = np.expand_dims(images, axis=3)
             images = np.expand_dims(annos, axis=3)
             
-        return images, annos
+        return images, annos, names
 
