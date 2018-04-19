@@ -44,19 +44,18 @@ class Model:
         
         with tf.name_scope("sampling"):
             # VAE sampling
-            gamma        = 0.0
+            gamma        = 1.0
             self.mu           = dense(self.enc, 50, activation=None, kernel_initializer=xavier(), name="mu")
             self.log_sigma_sq = dense(self.enc, 50, activation=None, kernel_initializer=xavier(), name="log_sigma_sq")
             eps          = tf.random_normal(shape=tf.shape(self.mu), mean=0.0, stddev=1.0, dtype=tf.float32)
-            self.z       = tf.add(self.mu, (tf.sqrt(tf.exp(self.log_sigma_sq)) * eps * gamma))
+            self.noisy_sigma  = tf.sqrt(tf.exp(self.log_sigma_sq)) * gamma
+            self.z       = tf.add(self.mu, self.noisy_sigma)
             self.z       = dropout(self.z, rate=0.1, training=self.training)
-            
+
             tf.summary.histogram("z", self.z)
             tf.summary.histogram("log_sigma_sq", self.log_sigma_sq)
             tf.summary.histogram("mu", self.mu)
             tf.summary.histogram("eps", eps)
-    #        self.z = dense( self.enc, 50, activation=relu, kernel_initializer=xavier(), name="z")
-    #        self.z = dropout(self.z,  rate=0.1, training=self.training)
             
         with tf.name_scope("decoder"):
             # Decoder    in           num   
@@ -68,7 +67,7 @@ class Model:
             self.dec  = conv2d_transpose(self.dec, 64, (3,3), (2,2), "same", activation=relu, name="dec4")
             self.dec  = conv2d_transpose(self.dec, 32, (5,5), (2,2), "same", activation=relu, name="dec3")
             self.dec  = conv2d_transpose(self.dec, 24, (5,5), (2,2), "same", activation=relu, name="dec2")
-            self.dec  = conv2d_transpose(self.dec, 3,  (5,5), (2,2), "same", activation=sigmoid, name="dec1")
+            self.dec  = conv2d_transpose(self.dec, 3,  (5,5), (2,2), "same", activation=relu, name="dec1")
             
             # # VAE Loss    
             # 1. Reconstruction loss: How far did we get from the actual image?
@@ -80,9 +79,7 @@ class Model:
             #self.kl_loss = tf.reduce_sum( 0.5 * (tf.exp(log_sigma) + tf.square(mu) - 1. - log_sigma) , axis=1)
             self.kl_loss = -0.5 * tf.reduce_sum(1 + self.log_sigma_sq - tf.square(self.mu) - tf.exp(self.log_sigma_sq) , axis=1)
             self.kl_loss = tf.reduce_mean(self.kl_loss)
-            #print(np.shape(self.rec_loss))
-            #print(np.shape(self.kl_loss))
-            beta = 0.0
+            beta = 5.0
             self.loss =  self.rec_loss + beta+self.kl_loss
             
             tf.summary.scalar("total_loss", self.loss)
@@ -115,10 +112,9 @@ class Model:
         self.test_loss  = {"total": [], "kl": [], "rec": []}
         best_ckpt = ""
         with tf.Session() as sess:
-            train_writer = tf.summary.FileWriter("./train_logs", sess.graph)
+            logs_path = os.path.join(save_dir, "train_logs")
+            train_writer = tf.summary.FileWriter(logs_path, sess.graph)
             sess.run(tf.global_variables_initializer())
-            checkpoint_path = 'vae_no_activation_func_000/ep_13_loss_11.624.ckpt'
-            self.saver.restore(sess, checkpoint_path)
             best_loss = 10**9.0  # some big number
             # TODO: restart from checkpoint
             count = 0
@@ -135,6 +131,10 @@ class Model:
                     temp_train_loss.append(np.array([loss, rec, kl]))
                     train_writer.add_summary(summary, count)
                     count += 1
+                    #print(f"z_shape: {np.shape(z)}, mu_shape: {np.shape(mu)}")
+#                   print(f"{z[0][0]}:{mu[0][0]}, {z[1][1]}:{mu[1][1]}, {z[2][2]}:{mu[2][2]}")
+#                   print(f"z - mu = {np.sum(z-mu)}: should equal zero")
+#                   print(f"noisy_sigma: {e_sig}")
                 
                 means = np.mean(np.array(temp_train_loss), axis=0)
                 
@@ -153,7 +153,7 @@ class Model:
                     loss, rec, kl = sess.run([self.loss, self.rec_loss, self.kl_loss],
                            feed_dict={self.x: images, self.y: annos, self.training: False})
                     temp_test_loss.append(np.array([loss, rec, kl]))
-                
+
                 means = np.mean(np.array(temp_test_loss), axis=0)
                 self.test_loss["total"].append(means[0])
                 self.test_loss["rec"].append( means[1])
@@ -169,7 +169,8 @@ class Model:
                         print("Model saved at {}".format(best_ckpt))
                         
                         if (sample_inf_gen is not None):
-                            path = os.path.join(save_dir, f"ep_{e}")
+                            path = os.path.join(*[save_dir, "sample_inferences", f"ep_{e}"])
+
                             self.SaveSampleInference(sess,sample_inf_gen, path)
 
         self.SaveLossPlots(save_dir)

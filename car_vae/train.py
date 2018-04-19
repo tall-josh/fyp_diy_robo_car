@@ -75,11 +75,11 @@ def main():
     # Create train and test generators
     batch_size  = args.batch_size
     train_gen   = DataGenerator(batch_size=batch_size,
-                      data_set=train[:100],
+                      data_set=train,
                       image_dir=data_dir)
 
     test_gen    = DataGenerator(batch_size=batch_size,
-                      data_set=test[:50],
+                      data_set=test,
                       image_dir=data_dir)
     
     sample_gen  = DataGenerator(batch_size=10,
