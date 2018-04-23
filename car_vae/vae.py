@@ -13,6 +13,8 @@ sys.path.append('..')
 from metrics import Metrics
 from utils import save_images
 
+NUM_EMBEDDINGS = 2000
+
 class Model:
     def __init__(self, in_shape):
         '''
@@ -25,14 +27,14 @@ class Model:
         self.y = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="label")
         self.training   = tf.placeholder(tf.bool, name="training")
         self.new_embeddings = tf.placeholder(tf.float32, shape=[None, 50])
-        self.embeddings     = tf.Variable(np.zeros(shape=[2000,50]), name="embeddings", dtype=tf.float32)
+        self.embeddings     = tf.Variable(np.zeros(shape=[NUM_EMBEDDINGS,50]), name="embeddings", dtype=tf.float32)
         paddings = tf.constant([[0,0],[4,4],[0,0],[0,0]])
         relu    = tf.nn.relu
         sigmoid = tf.nn.sigmoid
 
         with tf.name_scope("encoder"):
-            # Padding invector so reconstruction returns to the correct size.                                             h,  w, c
-            x_padded = tf.pad(self.x, paddings, "SYMMETRIC")                                                             #128,160, 3
+            # Padding invector so reconstruction returns to the correct size.
+            x_padded = tf.pad(self.x, paddings, "SYMMETRIC")
             y_padded = tf.pad(self.y, paddings, "SYMMETRIC")
             # Encoder            in     num   shape  stride   pad
             self.enc = conv2d(x_padded,  24,  (5,5), (2,2),  "same",
@@ -133,18 +135,23 @@ class Model:
         logs_path = os.path.join(save_dir, "train_logs")
         metadata  = os.path.join(logs_path, "metadata.tsv")
         if not os.path.exists(logs_path):
-          os.makedirs(logs_path)
+            os.makedirs(logs_path)
         test_gen.reset(shuffle=False)
         t_test = trange(test_gen.steps_per_epoch)
         t_test.set_description('tf.projector meta')
         labels = []
         for _ in t_test:
-            _ , annos, _ = test_gen.get_next_batch()
-            labels.extend(np.random.randint(0,15, size=50))
+            batch  = test_gen.get_next_batch()
+            labels.extend([a["steering"] for a in batch["annotations"]])
 
+        colors = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o']
         with open(metadata, 'w') as meta_file:
-            for l in labels:
-                meta_file.write(f"{l}\n")
+            meta_file.write("steering_bin\tcolor\n")
+            for steering_bin in labels[:NUM_EMBEDDINGS]:
+                _bin = int(steering_bin)
+                meta_file.write("{}\t{}\n".format(int(_bin),
+                                                  colors[_bin]))
+
         config = projector.ProjectorConfig()
         embedding = config.embeddings.add()
         embedding.tensor_name = self.embeddings.name
@@ -174,9 +181,11 @@ class Model:
                 t_train = trange(train_gen.steps_per_epoch)
                 t_train.set_description(f"Training Epoch: {e+1}")
                 for step in t_train:
-                    images, annos, _  = train_gen.get_next_batch()
+                    batch = train_gen.get_next_batch()
                     summary, _, loss, rec, kl = sess.run([merge, train_step, self.loss, self.rec_loss, self.kl_loss],
-                               feed_dict={self.x: images, self.y: annos, self.training: True})
+                               feed_dict={self.x: batch["augmented_images"],
+                                          self.y: batch["original_images"],
+                                          self.training: True})
                     temp_train_loss.append(np.array([loss, rec, kl]))
                     train_writer.add_summary(summary, count)
                     count += 1
@@ -195,13 +204,15 @@ class Model:
                 t_test = trange(test_gen.steps_per_epoch)
                 t_test.set_description('Testing')
                 for _ in t_test:
-                    images, annos, _ = test_gen.get_next_batch()
+                    batch = test_gen.get_next_batch()
                     loss, rec, kl, zeds = sess.run([self.loss, self.rec_loss, self.kl_loss, self.z],
-                           feed_dict={self.x: images, self.y: annos, self.training: False})
+                               feed_dict={self.x: batch["augmented_images"],
+                                          self.y: batch["original_images"],
+                                          self.training: False})
                     temp_test_loss.append(np.array([loss, rec, kl]))
                     embeddings.extend(zeds)
                 print(f"embeddings: {np.shape(embeddings)}")
-                sess.run(self.update_embeddings, feed_dict={self.new_embeddings: embeddings[:2000]})
+                sess.run(self.update_embeddings, feed_dict={self.new_embeddings: embeddings[:NUM_EMBEDDINGS]})
                 means = np.mean(np.array(temp_test_loss), axis=0)
                 self.test_loss["total"].append(means[0])
                 self.test_loss["rec"].append( means[1])
@@ -229,10 +240,13 @@ class Model:
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
-        ims, _, names = sample_inf_gen.get_next_batch()
+        batch = sample_inf_gen.get_next_batch()
         sample_inf_gen.reset(shuffle=False)
-        reconstructions = sess.run(self.dec, feed_dict={self.x: ims, self.training: False})
-        save_images(reconstructions, names, save_dir)   #TO DO: Finish this in Utils
+        reconstructions = sess.run(self.dec,
+                                   feed_dict={self.x: batch["original_images"],
+                                              self.training: False})
+        names = [a["image"] for a in batch["annotations"]]
+        save_images(reconstructions, names, save_dir)
 
     def SaveLossPlots(self, save_dir):
         import matplotlib.pyplot as plt

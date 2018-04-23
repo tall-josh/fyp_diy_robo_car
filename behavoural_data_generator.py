@@ -27,7 +27,8 @@ class DataGenerator(BaseDataGenerator):
         Mirror randomly, add some noise, pick up milk.
         '''
         if random.uniform(0.,1.) < 0.5:
-            return (np.flip(image, 1), (self.num_bins-1) - anno)
+            image = np.flip(image,1)
+            anno["steering"] = (self.num_bins-1)-anno["steering"]
         return image, anno
 
     def all_annotations(self, sort=False):
@@ -48,8 +49,7 @@ class DataGenerator(BaseDataGenerator):
             im = self.normalize_image(im)
             pair = {}
             pair["image"]    = im
-            pair["steering"] = an["steering"]
-            pair["throttle"] = an["throttle"]
+            pair["anno"]     = an
             all_data.append(pair)
         return all_data
 

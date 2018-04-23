@@ -61,9 +61,11 @@ def main():
                         help="height width chanels")
     parser.add_argument('--message', type=str, required=True,
                        help="an reminder or other data you may need to identify the training run later.")
-
+    NUM_BINS    = 15
     args        = parser.parse_args()
     data_dir    = args.data_dir
+    image_dir   = os.path.join(data_dir, "images")
+    anno_dir    = os.path.join(data_dir, "annotations")
     train_path  = args.train_txt
     test_path   = args.test_txt
 
@@ -75,16 +77,22 @@ def main():
     # Create train and test generators
     batch_size  = args.batch_size
     train_gen   = DataGenerator(batch_size=batch_size,
-                      data_set=train[:100],
-                      image_dir=data_dir)
+                      data_set=train[:150],
+                      image_dir=image_dir,
+                      anno_dir=anno_dir,
+                      num_bins=NUM_BINS)
 
     test_gen    = DataGenerator(batch_size=batch_size,
                       data_set=test,
-                      image_dir=data_dir)
+                      image_dir=image_dir,
+                      anno_dir=anno_dir,
+                      num_bins=NUM_BINS)
 
     sample_gen  = DataGenerator(batch_size=10,
                       data_set=test[:10],
-                      image_dir=data_dir,
+                      image_dir=image_dir,
+                      anno_dir=anno_dir,
+                      num_bins=NUM_BINS,
                       shuffle=False)
 
     # Save the config to a file
