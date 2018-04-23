@@ -77,13 +77,13 @@ def main():
     # Create train and test generators
     batch_size  = args.batch_size
     train_gen   = DataGenerator(batch_size=batch_size,
-                      data_set=train[:150],
+                      data_set=train[:2000],
                       image_dir=image_dir,
                       anno_dir=anno_dir,
                       num_bins=NUM_BINS)
 
     test_gen    = DataGenerator(batch_size=batch_size,
-                      data_set=test,
+                      data_set=test[:500],
                       image_dir=image_dir,
                       anno_dir=anno_dir,
                       num_bins=NUM_BINS)

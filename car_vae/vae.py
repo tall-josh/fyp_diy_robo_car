@@ -13,7 +13,7 @@ sys.path.append('..')
 from metrics import Metrics
 from utils import save_images
 
-NUM_EMBEDDINGS = 2000
+NUM_EMBEDDINGS = 500
 
 class Model:
     def __init__(self, in_shape):
@@ -37,41 +37,47 @@ class Model:
             x_padded = tf.pad(self.x, paddings, "SYMMETRIC")
             y_padded = tf.pad(self.y, paddings, "SYMMETRIC")
             # Encoder            in     num   shape  stride   pad
-            self.enc = conv2d(x_padded,  24,  (5,5), (2,2),  "same",
+            enc1  = conv2d(x_padded,  24,  (5,5), (2,2),  "same",
                               activation=relu, kernel_initializer=xavier(),
                               name="enc1")# 64, 80,24
-            self.enc = conv2d(self.enc, 32,  (5,5), (2,2),  "same",
+            enc2  = conv2d(enc1, 32,  (5,5), (2,2),  "same",
                               activation=relu, kernel_initializer=xavier(),
                               name="enc2")# 32, 40,32
-            self.enc = conv2d(self.enc, 64,  (5,5), (2,2),  "same",
+            enc3  = conv2d(enc2, 64,  (5,5), (2,2),  "same",
                               activation=relu, kernel_initializer=xavier(),
                               name="enc3")# 16, 20,64
-            self.enc = conv2d(self.enc, 64,  (3,3), (2,2),  "same",
+            enc4  = conv2d(enc3, 64,  (3,3), (2,2),  "same",
                               activation=relu, kernel_initializer=xavier(),
                               name="enc4")#  8, 10,64
-            self.enc = conv2d(self.enc, 64,  (3,3), (1,1),  "same",
+            enc5  = conv2d(enc4, 64,  (3,3), (1,1),  "same",
                               activation=relu, kernel_initializer=xavier(),
                               name="enc5")#  8, 10,64
-            self.enc = flatten(self.enc)
+            enc5f = flatten(enc5)
             #                     in   num
-            self.enc = dense(self.enc, 100,
+            enc6  = dense(enc5f, 100,
                              activation=relu, kernel_initializer=xavier(),
                              name="enc6")
-            self.enc = dropout(self.enc, rate=0.1, training=self.training)
+            enc6d = dropout(enc6, rate=0.1, training=self.training)
 
         with tf.name_scope("sampling"):
             # VAE sampling
             gamma        = 1.0
-            self.mu           = dense(self.enc, 50, activation=None,
+            self.mu           = dense(enc6d, 50, activation=None,
                                       kernel_initializer=xavier(),
                                       name="mu")
-            self.log_sigma_sq = dense(self.enc, 50, activation=None,
+            self.log_sigma_sq = dense(enc6d, 50, activation=None,
                                       kernel_initializer=xavier(),
                                       name="log_sigma_sq")
-            eps          = tf.random_normal(shape=tf.shape(self.mu), mean=0.0, stddev=1.0, dtype=tf.float32)
-            self.noisy_sigma  = tf.sqrt(tf.exp(self.log_sigma_sq)) * eps *  gamma
-            self.z       = tf.add(self.mu, self.noisy_sigma, name="z")
-            self.z       = dropout(self.z, rate=0.1, training=self.training)
+            eps          = tf.random_normal(shape=tf.shape(self.mu),
+                                            mean=0.0, stddev=1.0,
+                                            dtype=tf.float32)
+            # Sample A
+            #self.noisy_sigma  = tf.sqrt(tf.exp(self.log_sigma_sq))*eps
+            #_z       = tf.add(self.mu, self.noisy_sigma, name="z")
+
+            # Sample B
+            self.z = self.mu + tf.exp(self.log_sigma_sq /2) * eps
+#           self.z = dropout(_z, rate=0.1, training=self.training)
 
             tf.summary.histogram("z", self.z)
             tf.summary.histogram("log_sigma_sq", self.log_sigma_sq)
@@ -80,41 +86,44 @@ class Model:
 
         with tf.name_scope("decoder"):
             # Decoder    in          num
-            self.dec = dense(self.z, 100, activation=relu,
+            dec1 = dense(self.z, 100, activation=relu,
                              kernel_initializer=xavier(), name="dec6")
-            self.dec = dense(self.dec, (8*10*64), activation=relu,
+            dec2 = dense(dec1, (8*10*64), activation=relu,
                              kernel_initializer=xavier(), name="dec7")
-            self.dec  = tf.reshape(self.dec, (-1,8,10,64))
+            dec2r  = tf.reshape(dec2, (-1,8,10,64))
             #                        in num  shape  stride   pad
-            self.dec  = conv2d_transpose(self.dec, 64, (3,3), (1,1), "same",
+            dec3  = conv2d_transpose(dec2r, 64, (3,3), (1,1), "same",
                                          activation=relu, name="dec5")
-            self.dec  = conv2d_transpose(self.dec, 64, (3,3), (2,2), "same",
+            dec4  = conv2d_transpose(dec3, 64, (3,3), (2,2), "same",
                                          activation=relu, name="dec4")
-            self.dec  = conv2d_transpose(self.dec, 32, (5,5), (2,2), "same",
+            dec5  = conv2d_transpose(dec4, 32, (5,5), (2,2), "same",
                                          activation=relu, name="dec3")
-            self.dec  = conv2d_transpose(self.dec, 24, (5,5), (2,2), "same",
+            dec6  = conv2d_transpose(dec5, 24, (5,5), (2,2), "same",
                                          activation=relu, name="dec2")
-            self.dec  = conv2d_transpose(self.dec, 3,  (5,5), (2,2), "same",
+            self.dec  = conv2d_transpose(dec6, 3,  (5,5), (2,2), "same",
                                          activation=relu, name="dec1")
 
             # # VAE Loss
             # 1. Reconstruction loss: How far did we get from the actual image?
-            self.rec_loss = tf.reduce_sum(tf.square(y_padded - self.dec), axis=1)
-            self.rec_loss = tf.reduce_mean(self.rec_loss)
+            self.rec_loss = tf.reduce_mean(tf.reduce_sum(tf.square(y_padded - self.dec), axis=1))
 
             # 2. KL-Divergence: How far from the "true" distribution of z's is
             #                   our parameterised z?
+            # Loss A
             #self.kl_loss = tf.reduce_sum( 0.5 * (tf.exp(log_sigma) + tf.square(mu) - 1. - log_sigma) , axis=1)
-            self.kl_loss = -0.5 * tf.reduce_sum(1 + self.log_sigma_sq
-                                                  - tf.square(self.mu)
-                                                  - tf.exp(self.log_sigma_sq)
-                                                  , axis=1)
-            self.kl_loss = tf.reduce_mean(self.kl_loss)
-            beta = 1.0
-            self.loss =  self.rec_loss + beta+self.kl_loss
+
+            # Loss B
+            print(np.shape(self.mu))
+            print(np.shape(self.log_sigma_sq))
+            _kl_loss = 1 + self.log_sigma_sq - tf.square(self.mu) - tf.exp(self.log_sigma_sq)
+            self.kl_loss = -0.5 * tf.reduce_sum(_kl_loss, axis=1)
+
+
+            beta = 0.05
+            self.loss =  tf.reduce_mean(self.rec_loss + self.kl_loss)
 
             tf.summary.scalar("total_loss", self.loss)
-            tf.summary.scalar("kl_loss", self.kl_loss)
+            tf.summary.scalar("kl_loss", tf.reduce_mean(self.kl_loss))
             tf.summary.scalar("rec_loss", self.rec_loss)
 
             self.update_embeddings = self.embeddings.assign(self.new_embeddings)
@@ -144,13 +153,10 @@ class Model:
             batch  = test_gen.get_next_batch()
             labels.extend([a["steering"] for a in batch["annotations"]])
 
-        colors = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o']
         with open(metadata, 'w') as meta_file:
-            meta_file.write("steering_bin\tcolor\n")
             for steering_bin in labels[:NUM_EMBEDDINGS]:
                 _bin = int(steering_bin)
-                meta_file.write("{}\t{}\n".format(int(_bin),
-                                                  colors[_bin]))
+                meta_file.write("{}\n".format(int(_bin)))
 
         config = projector.ProjectorConfig()
         embedding = config.embeddings.add()
@@ -186,7 +192,7 @@ class Model:
                                feed_dict={self.x: batch["augmented_images"],
                                           self.y: batch["original_images"],
                                           self.training: True})
-                    temp_train_loss.append(np.array([loss, rec, kl]))
+                    temp_train_loss.append(np.array([loss, rec, np.mean(kl)]))
                     train_writer.add_summary(summary, count)
                     count += 1
 
@@ -209,9 +215,11 @@ class Model:
                                feed_dict={self.x: batch["augmented_images"],
                                           self.y: batch["original_images"],
                                           self.training: False})
-                    temp_test_loss.append(np.array([loss, rec, kl]))
+                    temp_test_loss.append(np.array([loss, rec, np.mean(kl)]))
+#                    print(f"mu: {mu[0]}")
+#                    print(f"ns: {ns[0]}")
+#                    print(f"zeds:  {zeds[0]}")
                     embeddings.extend(zeds)
-                print(f"embeddings: {np.shape(embeddings)}")
                 sess.run(self.update_embeddings, feed_dict={self.new_embeddings: embeddings[:NUM_EMBEDDINGS]})
                 means = np.mean(np.array(temp_test_loss), axis=0)
                 self.test_loss["total"].append(means[0])

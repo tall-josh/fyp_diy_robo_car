@@ -22,13 +22,9 @@ class DataGenerator(BaseDataGenerator):
         '''
         if random.uniform(0.,1.) < 0.5:
             image     = np.flip(image, 1)
-            augmented = image.copy()
             anno["steering"] = (num_bins-1)-anno["steering"]
-        else:
-            image     = np.flip(image, 1)
-            augmented = image.copy()
-#           TODO: AUGMENT
-            anno["steering"] = (num_bins-1)-anno["steering"]
+#       TODO: AUGMENT
+        augmented = None
         return image, augmented, anno
 
     def load_all_data(self, image_dir, anno_dir, data_set, num_bins):
@@ -44,7 +40,7 @@ class DataGenerator(BaseDataGenerator):
                                                 val_range=1024)
             im, aug_im, an          = self.augment(im, an, num_bins)
             pair["original_image"]  = im
-            pair["augmented_image"] = aug_im
+            pair["augmented_image"] = im
             pair["anno"]            = an
             pair["name"]            = name
             # To Do, add noisy image or something
