@@ -13,7 +13,7 @@ sys.path.append('..')
 from metrics import Metrics
 from utils import save_images
 
-NUM_EMBEDDINGS = 500
+NUM_EMBEDDINGS = 2000
 
 class Model:
     def __init__(self, in_shape):
@@ -101,30 +101,30 @@ class Model:
 
             dec7  = conv2d_transpose(dec6, 3,  (5,5), (2,2), "same",
                                          activation=None, name="dec8")
-            self.dec  = sigmoid(dec7)
+            self.dec  = relu(dec7)
 
             # # VAE Loss
             # 1. Reconstruction loss: How far did we get from the actual image?
-#           self.rec_loss = -tf.reduce_mean(
-#                              tf.reduce_sum(tf.square(y_padded
-#                                          - self.dec), axis=1))
-            _rec_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=dec7, labels=y_padded)
-            _rec_loss = tf.reduce_sum(_rec_loss, axis=[1,2,3])
-            self.rec_loss = tf.reduce_mean(_rec_loss)
+            self.rec_loss = tf.reduce_sum(tf.square(y_padded - self.dec), axis=[1,2,3])
+
+#            _rec_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=dec7, labels=y_padded)
+#           _rec_loss = tf.reduce_sum(_rec_loss, axis=[1,2,3])
+#           self.rec_loss = tf.reduce_mean(_rec_loss)
 
             # 2. KL-Divergence: How far from the distribution 'z' is sampled
             #                   from the desired zero mean unit variance?
-            _kl_loss = 0.5 * tf.reduce_sum(1+tf.square(tf.exp(self.log_sigma))
-                                             -tf.square(self.mu)
-                                          - (1e-8 + tf.square(tf.exp(self.log_sigma)))
-                                          , axis=1)
-            self.kl_loss = tf.reduce_mean(_kl_loss)
+            self.kl_loss = 0.5 * tf.reduce_sum(tf.square(self.mu)
+                                            + (tf.exp(2*self.log_sigma))
+                                            - 2*self.log_sigma
+                                            - 1
+                                            , axis=1)
+#            self.kl_loss = tf.reduce_mean(_kl_loss)
 
             self.loss =  tf.reduce_mean(self.rec_loss + self.kl_loss)
 
             tf.summary.scalar("total_loss", self.loss)
-            tf.summary.scalar("kl_loss", self.kl_loss)
-            tf.summary.scalar("rec_loss", self.rec_loss)
+            tf.summary.scalar("kl_loss", tf.reduce_mean(self.kl_loss))
+            tf.summary.scalar("rec_loss", tf.reduce_mean(self.rec_loss))
 
             self.update_embeddings = self.embeddings.assign(self.new_embeddings)
 
@@ -192,7 +192,7 @@ class Model:
                                feed_dict={self.x: batch["augmented_images"],
                                           self.y: batch["original_images"],
                                           self.training: True})
-                    temp_train_loss.append(np.array([loss, rec, np.mean(kl)]))
+                    temp_train_loss.append(np.array([loss, np.mean(rec), np.mean(kl)]))
                     train_writer.add_summary(summary, count)
                     count += 1
 
@@ -215,7 +215,7 @@ class Model:
                                feed_dict={self.x: batch["augmented_images"],
                                           self.y: batch["original_images"],
                                           self.training: False})
-                    temp_test_loss.append(np.array([loss, rec, np.mean(kl)]))
+                    temp_test_loss.append(np.array([loss, np.mean(rec), np.mean(kl)]))
 #                    print(f"mu: {mu[0]}")
 #                    print(f"ns: {ns[0]}")
 #                    print(f"zeds:  {zeds[0]}")
