@@ -61,69 +61,69 @@ class Model:
 
         with tf.name_scope("sampling"):
             # VAE sampling
-            gamma        = 1.0
+            '''
+            Note: exp(log(log_sigma / 2)) = sigma
+            '''
             self.mu           = dense(enc6d, 50, activation=None,
                                       kernel_initializer=xavier(),
                                       name="mu")
-            self.log_sigma_sq = dense(enc6d, 50, activation=None,
+            self.log_sigma = dense(enc6d, 50, activation=None,
                                       kernel_initializer=xavier(),
-                                      name="log_sigma_sq")
+                                      name="log_sigma")
             eps          = tf.random_normal(shape=tf.shape(self.mu),
                                             mean=0.0, stddev=1.0,
                                             dtype=tf.float32)
             # Sample A
-            #self.noisy_sigma  = tf.sqrt(tf.exp(self.log_sigma_sq))*eps
-            #_z       = tf.add(self.mu, self.noisy_sigma, name="z")
-
-            # Sample B
-            self.z = self.mu + tf.exp(self.log_sigma_sq /2) * eps
-#           self.z = dropout(_z, rate=0.1, training=self.training)
+            self.noisy_sigma  = tf.exp(self.log_sigma) * eps
+            self.z       = tf.add(self.mu, self.noisy_sigma, name="z")
 
             tf.summary.histogram("z", self.z)
-            tf.summary.histogram("log_sigma_sq", self.log_sigma_sq)
+            tf.summary.histogram("log_sigma", self.log_sigma)
             tf.summary.histogram("mu", self.mu)
             tf.summary.histogram("eps", eps)
 
         with tf.name_scope("decoder"):
             # Decoder    in          num
             dec1 = dense(self.z, 100, activation=relu,
-                             kernel_initializer=xavier(), name="dec6")
+                             kernel_initializer=xavier(), name="dec1")
             dec2 = dense(dec1, (8*10*64), activation=relu,
-                             kernel_initializer=xavier(), name="dec7")
+                             kernel_initializer=xavier(), name="dec2")
             dec2r  = tf.reshape(dec2, (-1,8,10,64))
             #                        in num  shape  stride   pad
             dec3  = conv2d_transpose(dec2r, 64, (3,3), (1,1), "same",
-                                         activation=relu, name="dec5")
+                                         activation=relu, name="dec3")
             dec4  = conv2d_transpose(dec3, 64, (3,3), (2,2), "same",
                                          activation=relu, name="dec4")
             dec5  = conv2d_transpose(dec4, 32, (5,5), (2,2), "same",
-                                         activation=relu, name="dec3")
+                                         activation=relu, name="dec5")
             dec6  = conv2d_transpose(dec5, 24, (5,5), (2,2), "same",
-                                         activation=relu, name="dec2")
-            self.dec  = conv2d_transpose(dec6, 3,  (5,5), (2,2), "same",
-                                         activation=relu, name="dec1")
+                                         activation=relu, name="dec6")
+
+            dec7  = conv2d_transpose(dec6, 3,  (5,5), (2,2), "same",
+                                         activation=None, name="dec8")
+            self.dec  = sigmoid(dec7)
 
             # # VAE Loss
             # 1. Reconstruction loss: How far did we get from the actual image?
-            self.rec_loss = tf.reduce_mean(tf.reduce_sum(tf.square(y_padded - self.dec), axis=1))
+#           self.rec_loss = -tf.reduce_mean(
+#                              tf.reduce_sum(tf.square(y_padded
+#                                          - self.dec), axis=1))
+            _rec_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=dec7, labels=y_padded)
+            _rec_loss = tf.reduce_sum(_rec_loss, axis=[1,2,3])
+            self.rec_loss = tf.reduce_mean(_rec_loss)
 
-            # 2. KL-Divergence: How far from the "true" distribution of z's is
-            #                   our parameterised z?
-            # Loss A
-            #self.kl_loss = tf.reduce_sum( 0.5 * (tf.exp(log_sigma) + tf.square(mu) - 1. - log_sigma) , axis=1)
+            # 2. KL-Divergence: How far from the distribution 'z' is sampled
+            #                   from the desired zero mean unit variance?
+            _kl_loss = 0.5 * tf.reduce_sum(1+tf.square(tf.exp(self.log_sigma))
+                                             -tf.square(self.mu)
+                                          - (1e-8 + tf.square(tf.exp(self.log_sigma)))
+                                          , axis=1)
+            self.kl_loss = tf.reduce_mean(_kl_loss)
 
-            # Loss B
-            print(np.shape(self.mu))
-            print(np.shape(self.log_sigma_sq))
-            _kl_loss = 1 + self.log_sigma_sq - tf.square(self.mu) - tf.exp(self.log_sigma_sq)
-            self.kl_loss = -0.5 * tf.reduce_sum(_kl_loss, axis=1)
-
-
-            beta = 0.05
             self.loss =  tf.reduce_mean(self.rec_loss + self.kl_loss)
 
             tf.summary.scalar("total_loss", self.loss)
-            tf.summary.scalar("kl_loss", tf.reduce_mean(self.kl_loss))
+            tf.summary.scalar("kl_loss", self.kl_loss)
             tf.summary.scalar("rec_loss", self.rec_loss)
 
             self.update_embeddings = self.embeddings.assign(self.new_embeddings)
