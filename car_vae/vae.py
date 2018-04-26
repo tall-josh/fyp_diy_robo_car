@@ -14,6 +14,7 @@ from metrics import Metrics
 from utils import save_images
 
 NUM_EMBEDDINGS = 2000
+BETA_MAX = 5.0
 
 class Model:
     def __init__(self, in_shape):
@@ -26,6 +27,7 @@ class Model:
         self.x = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="input")
         self.y = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="label")
         self.training   = tf.placeholder(tf.bool, name="training")
+        self.beta = tf.placeholder(tf.float32, name="beta")
         self.new_embeddings = tf.placeholder(tf.float32, shape=[None, 50])
         self.embeddings     = tf.Variable(np.zeros(shape=[NUM_EMBEDDINGS,50]), name="embeddings", dtype=tf.float32)
         paddings = tf.constant([[0,0],[4,4],[0,0],[0,0]])
@@ -120,7 +122,7 @@ class Model:
                                             , axis=1)
 #            self.kl_loss = tf.reduce_mean(_kl_loss)
 
-            self.loss =  tf.reduce_mean(self.rec_loss + self.kl_loss)
+            self.loss =  tf.reduce_mean(self.rec_loss + self.kl_loss*self.beta)
 
             tf.summary.scalar("total_loss", self.loss)
             tf.summary.scalar("kl_loss", tf.reduce_mean(self.kl_loss))
@@ -179,7 +181,7 @@ class Model:
             sess.run(tf.global_variables_initializer())
             best_loss = 10**9.0  # some big number
             # TODO: restart from checkpoint
-            count = 0
+            count = 1.0
             for e in range(epochs):
                 merge = tf.summary.merge_all()
                 temp_train_loss = []
@@ -187,14 +189,18 @@ class Model:
                 t_train = trange(train_gen.steps_per_epoch)
                 t_train.set_description(f"Training Epoch: {e+1}")
                 for step in t_train:
+                    beta = min(1.0, count/30000.0) * BETA_MAX
+
                     batch = train_gen.get_next_batch()
                     summary, _, loss, rec, kl = sess.run([merge, train_step, self.loss, self.rec_loss, self.kl_loss],
                                feed_dict={self.x: batch["augmented_images"],
                                           self.y: batch["original_images"],
+                                          self.beta: beta,
                                           self.training: True})
                     temp_train_loss.append(np.array([loss, np.mean(rec), np.mean(kl)]))
                     train_writer.add_summary(summary, count)
                     count += 1
+                    print("BETA: {}".format(beta))
 
                 means = np.mean(np.array(temp_train_loss), axis=0)
 
@@ -214,6 +220,7 @@ class Model:
                     loss, rec, kl, zeds = sess.run([self.loss, self.rec_loss, self.kl_loss, self.z],
                                feed_dict={self.x: batch["augmented_images"],
                                           self.y: batch["original_images"],
+                                          self.beta: beta,
                                           self.training: False})
                     temp_test_loss.append(np.array([loss, np.mean(rec), np.mean(kl)]))
 #                    print(f"mu: {mu[0]}")
