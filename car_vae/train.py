@@ -103,8 +103,9 @@ def main():
     message     = args.message
     best_ckpt   = "The session must have crashed before finnishing :-("
     assert_message = "Name must be unique, This will be the name of the dir we'll used to save checkpoints"
-    assert not os.path.exists(save_dir), "{}: {}".format(assert_message, save_dir)
-    os.makedirs(save_dir)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
     save_config(save_dir, data_dir, train_path, test_path, lr, batch_size, epochs, in_shape, best_ckpt,  message)
 
     # Kick-off

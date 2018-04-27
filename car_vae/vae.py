@@ -183,13 +183,17 @@ class Model:
             # TODO: restart from checkpoint
             count = 1.0
             for e in range(epochs):
+
+                # begin saving model again if loss has made an upturn
+                if e == 300: best_loss = 10**9.0
+
                 merge = tf.summary.merge_all()
                 temp_train_loss = []
                 train_gen.reset()
                 t_train = trange(train_gen.steps_per_epoch)
                 t_train.set_description(f"Training Epoch: {e+1}")
                 for step in t_train:
-                    beta = min(1.0, count/30000.0) * BETA_MAX
+                    beta = min(1.0, e/300.) * BETA_MAX
 
                     batch = train_gen.get_next_batch()
                     summary, _, loss, rec, kl = sess.run([merge, train_step, self.loss, self.rec_loss, self.kl_loss],
