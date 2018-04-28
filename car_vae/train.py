@@ -19,7 +19,7 @@ import json
 }
 '''
 
-def save_config(save_dir, data_dir, train_txt, test_txt, lr, batch_size, epochs, in_shape, best_ckpt, message):
+def save_config(save_dir, data_dir, train_txt, test_txt, lr, batch_size, epochs, in_shape, best_ckpt, best_loss, message):
     payload = {}
 #    payload["name"]        = name
     payload["data_dir"]    = data_dir
@@ -30,6 +30,7 @@ def save_config(save_dir, data_dir, train_txt, test_txt, lr, batch_size, epochs,
     payload["epochs"]      = epochs
     payload["in_shape"]    = in_shape
     payload["best_ckpt"]   = best_ckpt
+    payload["best_loss"]   = float(best_loss)
     payload["message"]     = message
     path = os.path.join(save_dir, "config.json")
 
@@ -101,18 +102,21 @@ def main():
     lr          = args.lr
     save_dir    = args.save_dir
     message     = args.message
+    best_loss   = -1
     best_ckpt   = "The session must have crashed before finnishing :-("
-    assert_message = "Name must be unique, This will be the name of the dir we'll used to save checkpoints"
+    
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    save_config(save_dir, data_dir, train_path, test_path, lr, batch_size, epochs, in_shape, best_ckpt,  message)
+    save_config(save_dir, data_dir, train_path, test_path, lr, batch_size, epochs, in_shape, best_ckpt, best_loss,  message)
 
     # Kick-off
     vae         = Model(in_shape)
-    best_ckpt   = vae.Train(train_gen, test_gen, save_dir,
+    ckpt_loss   = vae.Train(train_gen, test_gen, save_dir,
                             epochs=epochs, lr=lr, sample_inf_gen=sample_gen)
-    save_config(save_dir, data_dir, train_path, test_path, lr, batch_size, epochs, in_shape, best_ckpt,  message)
+    best_ckpt = ckpt_loss["best_ckpt"]
+    best_loss = ckpt_loss["best_loss"]
+    save_config(save_dir, data_dir, train_path, test_path, lr, batch_size, epochs, in_shape, best_ckpt, best_loss,  message)
 
 if __name__ == "__main__":
     main()
