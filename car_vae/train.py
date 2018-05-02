@@ -5,21 +5,13 @@ from vae_data_generator import DataGenerator
 import json
 
 '''
-{
-"train_text"  : "../data/evened_train.txt",
-"trest_text"  : "../data/evened_test.txt",
-"name"        : "cnn_test",
-"save_dir"    : "donkey_car",
-"num_bins"    : 15,
-"data_dir"    : "..data/color_120_160",
-"in_shape"    : [120, 160, 3],
-"message"     : "a simple nn test",
-"epochs"      : 1,
-"lr"          : 0.001
-}
-'''
+Exaple bash command:
 
-def save_config(save_dir, data_dir, train_txt, test_txt, lr, batch_size, epochs, in_shape, best_ckpt, best_loss, message):
+python train.py --train-txt
+'''
+def save_config(save_dir, data_dir, train_txt, test_txt, lr, batch_size,
+                epochs, in_shape, best_ckpt, best_loss, beta, annealing_epochs,
+                message):
     payload = {}
 #    payload["name"]        = name
     payload["data_dir"]    = data_dir
@@ -31,16 +23,13 @@ def save_config(save_dir, data_dir, train_txt, test_txt, lr, batch_size, epochs,
     payload["in_shape"]    = in_shape
     payload["best_ckpt"]   = best_ckpt
     payload["best_loss"]   = float(best_loss)
+    payload["annealing"]   = annealing_epochs
+    payload["beta"]        = beta
     payload["message"]     = message
     path = os.path.join(save_dir, "config.json")
 
     with open(path, 'w') as f:
         json.dump(payload, f)
-
-''' -----       VAE       -----
-
-python train.py --train-txt ../data//evened_train.txt --test-txt ../data/evened_test.txt --save-dir vae_000 --epochs 1 --data-dir ../data/clr_120_160/images/ --shape 120 160 3 --message "test run, totally will not work"
-'''
 
 def main():
     import argparse as argparse
@@ -50,18 +39,25 @@ def main():
     parser.add_argument('--test-txt', type=str, required=True,
                         help="Path to list of test example names.")
     parser.add_argument('--save-dir', type=str, required=True,
-                        help="Directory you wish to save training results to. This must be unique and will be created for you at run time. ")
+                        help="Directory you wish to save training resuts to.")
     parser.add_argument('--lr', type=float, required=False, default = 0.001,
                         help="Learning rate.")
     parser.add_argument('--batch-size', type=int, required=False, default=50,
                         help="Number of samples fed into the network at one time.")
     parser.add_argument('--epochs', type=int, required=False, default=10,
                        help="Number of times the network looks at all the data.")
+    parser.add_argument('--beta', type=int, required=False, default=1,
+                       help="Weighting applied to KL divergence loss")
+    parser.add_argument('--annealing', type=int, required=False, default=0,
+                       help="Number epochs with which to increase beta from 0 \
+                             to beta.")
     parser.add_argument('--data-dir', type=str, required=True)
-    parser.add_argument('--shape', type=int, required=False, nargs=3, default = [120, 160, 3],
+    parser.add_argument('--shape', type=int, required=False, nargs=3,
+                        default = [120, 160, 3],
                         help="height width chanels")
     parser.add_argument('--message', type=str, required=True,
-                       help="an reminder or other data you may need to identify the training run later.")
+                       help="an reminder or other data you may need to \
+                             identify the training run later.")
     NUM_BINS    = 15
     args        = parser.parse_args()
     data_dir    = args.data_dir
@@ -78,13 +74,13 @@ def main():
     # Create train and test generators
     batch_size  = args.batch_size
     train_gen   = DataGenerator(batch_size=batch_size,
-                      data_set=train,
+                      data_set=train[:100],
                       image_dir=image_dir,
                       anno_dir=anno_dir,
                       num_bins=NUM_BINS)
 
     test_gen    = DataGenerator(batch_size=batch_size,
-                      data_set=test,
+                      data_set=test[:50],
                       image_dir=image_dir,
                       anno_dir=anno_dir,
                       num_bins=NUM_BINS)
@@ -103,20 +99,27 @@ def main():
     save_dir    = args.save_dir
     message     = args.message
     best_loss   = -1
+    annealing_epochs = args.annealing
+    beta        = args.beta
     best_ckpt   = "The session must have crashed before finnishing :-("
-    
+
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    save_config(save_dir, data_dir, train_path, test_path, lr, batch_size, epochs, in_shape, best_ckpt, best_loss,  message)
+    save_config(save_dir, data_dir, train_path, test_path, lr, batch_size,
+                epochs, in_shape, best_ckpt, best_loss, beta, annealing_epochs,
+                message)
 
     # Kick-off
     vae         = Model(in_shape)
-    ckpt_loss   = vae.Train(train_gen, test_gen, save_dir,
-                            epochs=epochs, lr=lr, sample_inf_gen=sample_gen)
+    ckpt_loss   = vae.train(train_gen, test_gen, save_dir,
+                            epochs=epochs, lr=lr, sample_inf_gen=sample_gen,
+                            annealing_epochs=annealing_epochs, beta_max=beta)
     best_ckpt = ckpt_loss["best_ckpt"]
     best_loss = ckpt_loss["best_loss"]
-    save_config(save_dir, data_dir, train_path, test_path, lr, batch_size, epochs, in_shape, best_ckpt, best_loss,  message)
+    save_config(save_dir, data_dir, train_path, test_path, lr, batch_size,
+                epochs, in_shape, best_ckpt, best_loss, beta, annealing_epochs,
+                message)
 
 if __name__ == "__main__":
     main()

@@ -13,27 +13,37 @@ sys.path.append('..')
 from metrics import Metrics
 from utils import save_images
 
-NUM_EMBEDDINGS = 2000
-BETA_MAX = 5.0
-
 class Model:
-    def __init__(self, in_shape):
+    def __init__(self, in_shape, embedding_dim=50, num_projections=20):
         '''
         classes:  List of class names or integers corrisponding to each class being classified
                   by the network. ie: ['left', 'straight', 'right'] or [0, 1, 2]
         '''
+        # number of elements in the embedding vector
+        self.embedding_dim = embedding_dim
+        # number of test embeddings to project in tensorboard
+        self.num_projections = num_projections
         # Define model
         tf.reset_default_graph()
-        self.x = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="input")
-        self.y = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="label")
+        self.x = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="x")
+        self.y = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="y")
         self.training   = tf.placeholder(tf.bool, name="training")
-        self.beta = tf.placeholder(tf.float32, name="beta")
-        self.new_embeddings = tf.placeholder(tf.float32, shape=[None, 50], name="new_embeddings")
-        self.embeddings     = tf.Variable(np.zeros(shape=[NUM_EMBEDDINGS,50]), name="embeddings", dtype=tf.float32)
+        self.new_beta = tf.placeholder(dtype=tf.float32)
+        self.beta = tf.get_variable("beta", dtype=tf.float32,
+                                    initializer=0.,
+                                    trainable=False)
+        self.new_embeddings = tf.placeholder(tf.float32,
+                                              shape=[None, self.embedding_dim])
+        self.embeddings     = tf.get_variable("embeddings",
+                                              dtype=tf.float32,
+                                              shape=
+                                             [self.num_projections,
+                                              self.embedding_dim],
+                                             initializer=tf.zeros_initializer(),
+                                              trainable=False)
         paddings = tf.constant([[0,0],[4,4],[0,0],[0,0]])
         relu    = tf.nn.relu
         sigmoid = tf.nn.sigmoid
-
         with tf.name_scope("encoder"):
             # Padding invector so reconstruction returns to the correct size.
             x_padded = tf.pad(self.x, paddings, "SYMMETRIC")
@@ -65,16 +75,15 @@ class Model:
             '''
             Note: exp(log(log_sigma / 2)) = sigma
             '''
-            self.mu           = dense(enc6d, 50, activation=None,
+            self.mu           = dense(enc6d, self.embedding_dim, activation=None,
                                       kernel_initializer=xavier(),
                                       name="mu")
-            self.log_sigma = dense(enc6d, 50, activation=None,
+            self.log_sigma = dense(enc6d, self.embedding_dim, activation=None,
                                       kernel_initializer=xavier(),
                                       name="log_sigma")
             eps          = tf.random_normal(shape=tf.shape(self.mu),
                                             mean=0.0, stddev=1.0,
                                             dtype=tf.float32, name="eps")
-            # Sample A
             self.noisy_sigma  = tf.exp(self.log_sigma) * eps
             self.z       = tf.add(self.mu, self.noisy_sigma, name="z")
 
@@ -104,6 +113,7 @@ class Model:
                                          activation=None, name="dec8")
             self.dec  = relu(dec7)
 
+        with tf.name_scope("loss"):
             # # VAE Loss
             # 1. Reconstruction loss: How far did we get from the actual image?
             y_padded = tf.pad(self.y, paddings, "SYMMETRIC")
@@ -116,28 +126,35 @@ class Model:
                                             - 2*self.log_sigma
                                             - 1
                                             , axis=1)
-            self.loss =  tf.reduce_mean(self.rec_loss + self.kl_loss*self.beta)
+            self.loss =  tf.reduce_mean(self.rec_loss + self.kl_loss*self.beta,
+                                        name='total_loss')
 
             tf.summary.scalar("total_loss", self.loss)
             tf.summary.scalar("kl_loss", tf.reduce_mean(self.kl_loss))
             tf.summary.scalar("rec_loss", tf.reduce_mean(self.rec_loss))
             tf.summary.scalar("beta", self.beta)
 
-            self.update_embeddings = self.embeddings.assign(self.new_embeddings)
+        self.update_beta       = self.beta.assign(self.new_beta)
+        self.update_embeddings = self.embeddings.assign(self.new_embeddings)
 
+
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+        self.train_step = optimizer.minimize(self.loss, name="train_step")
+
+        self.init_vars = tf.global_variables_initializer()
         self.saver = tf.train.Saver()
 
-    def Infer(self, images, checkpoint_path, save_dir):
-        with tf.Session() as sess:
-            self.saver.restore(sess, checkpoint_path)
-            reconstructions = sess.run(self.dec, feed_dict={self.x: images, self.training: False})
-            for i, (image, recon) in enumerate(zip(images,reconstructions)):
-                pass
+#    def Infer(self, images, checkpoint_path, save_dir):
+#        with tf.Session() as sess:
+#            self.saver.restore(sess, checkpoint_path)
+#            reconstructions = sess.run(self.dec, feed_dict={self.x: images, self.training: False})
+#            for i, (image, recon) in enumerate(zip(images,reconstructions)):
+#                pass
                 # cv2.imwrite(os.path.join(save_dir, f"{i:001}_reconstruction.jpg"), recon)
                 # cv2.imwrite(os.path.join(save_dir, f"{i:001}_original.jpg"), image)
-            return reconstructions, images
+#            return reconstructions, images
 
-    def _SetupMeta(self, save_dir, test_gen):
+    def setup_meta(self, save_dir, test_gen):
         logs_path = os.path.join(save_dir, "train_logs")
         metadata  = os.path.join(logs_path, "metadata.tsv")
         if not os.path.exists(logs_path):
@@ -151,7 +168,7 @@ class Model:
             labels.extend([a["steering"] for a in batch["annotations"]])
 
         with open(metadata, 'w') as meta_file:
-            for steering_bin in labels[:NUM_EMBEDDINGS]:
+            for steering_bin in labels[:self.num_projections]:
                 _bin = int(steering_bin)
                 meta_file.write("{}\n".format(int(_bin)))
 
@@ -161,15 +178,14 @@ class Model:
         embedding.metadata_path = metadata
         return logs_path
 
-    def anneal_beta(self, epoch):
-        return min(1.0, epoch/300.) * BETA_MAX   
- 
-    def Train(self, train_gen, test_gen, save_dir, epochs=10, lr=0.001, sample_inf_gen=None):
 
-        logs_path = self._SetupMeta(save_dir, test_gen)
+    def train(self, train_gen, test_gen, save_dir, epochs=10, lr=0.001,
+              sample_inf_gen=None, annealing_epochs=0, beta_max=1):
 
-        optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-        train_step = optimizer.minimize(self.loss)
+        logs_path = self.setup_meta(save_dir, test_gen)
+
+#        optimizer = tf.train.AdamOptimizer(learning_rate=lr)
+#        train_step = optimizer.minimize(self.loss, name="train_step")
 
         best_ckpt = ""
         with tf.Session() as sess:
@@ -177,40 +193,41 @@ class Model:
             train_writer = tf.summary.FileWriter(logs_path, sess.graph)
 
             # Init
-            sess.run(tf.global_variables_initializer())
+            sess.run(self.init_vars)
 
             # some big number
-            best_loss = 10**9.0  
+            best_loss = 10**9.0
 
             # TODO: restart from checkpoint
-            
-            count = 1.0
+
+            global_step = 0.
             for e in range(epochs):
 
-                # begin saving model again if loss has made an upturn
-                if e == 300: best_loss = 10**9.0
 
                 # Tensorboard
                 merge = tf.summary.merge_all()
 
                 # Begin Training
+                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 train_gen.reset()
                 t_train = trange(train_gen.steps_per_epoch)
                 t_train.set_description(f"Training Epoch: {e+1}")
                 for step in t_train:
-                    beta = self.anneal_beta(e)
-
+                    _beta = self.anneal_beta(global_step, annealing_epochs,
+                                            train_gen.steps_per_epoch, beta_max)
+                    sess.run(self.update_beta, feed_dict={self.new_beta: _beta})
                     batch = train_gen.get_next_batch()
-                    summary, _, loss = sess.run([merge, train_step, self.loss],
+                    summary, _, loss, b = sess.run([merge, self.train_step,
+                                                 self.loss, self.beta],
                                feed_dict={self.x: batch["augmented_images"],
                                           self.y: batch["original_images"],
-                                          self.beta: beta,
                                           self.training: True})
-                    train_writer.add_summary(summary, count)
-                    print("BETA: {}".format(beta))
-                    count += 1
+                    train_writer.add_summary(summary, global_step)
+                    global_step += 1
+                    print(f"beta: {b}")
 
                 # Begin Testing
+                #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 embeddings      = []
                 test_gen.reset(shuffle=False)
                 t_test = trange(test_gen.steps_per_epoch)
@@ -220,35 +237,48 @@ class Model:
                     loss, zeds = sess.run([self.loss, self.z],
                                feed_dict={self.x: batch["augmented_images"],
                                           self.y: batch["original_images"],
-                                          self.beta: beta,
                                           self.training: False})
                     embeddings.extend(zeds)
+                # House keeping
+                #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
                 # Update embedding being plotted by tensorboard
                 sess.run(self.update_embeddings,
                          feed_dict={self.new_embeddings:
-                                    embeddings[:NUM_EMBEDDINGS]})
+                                    embeddings[:self.num_projections]})
 
-                # If we have a new best loss then save the ckpt and some
-                # sample inferences
-                cur_loss = np.mean(loss)
-                print(f"Test Loss: {cur_loss:0.3f}\n" + 50*"-")
-                if cur_loss < best_loss:
-                        best_loss = cur_loss
-                        path = f"{save_dir}/ep_{e+1}_loss_{best_loss:0.3f}"
-                        best_ckpt = self.saver.save(sess, path + ".ckpt")
+                # Only begin saving checkpoints after beta is fully annealed
+                if e >= annealing_epochs:
+                    # only need to save graph once, then save the weights
+                    # at each improving epoch
+                    if e == annealing_epochs:
+                        path = os.path.join(save_dir, "model_def")
                         self.saver.export_meta_graph(path + ".meta")
-                        print("Model saved at {}".format(best_ckpt))
-
-                        if (sample_inf_gen is not None):
-                            path = os.path.join(*[save_dir, "sample_inferences", f"ep_{e}"])
-
-                            self.SaveSampleInference(sess,sample_inf_gen, path)
+                    # If we have a new best loss then save the ckpt and some
+                    # sample inferences
+                    cur_loss = np.mean(loss)
+                    print(f"Test Loss: {cur_loss:0.3f}\n" + 50*"-")
+                    if cur_loss < best_loss:
+                            best_loss = cur_loss
+                            path = f"{save_dir}/ep_{e+1}_loss_{best_loss:0.3f}"
+                            best_ckpt = self.saver.save(sess, path + ".ckpt",
+                                                        write_meta_graph=False)
+                            print("Model saved at {}".format(best_ckpt))
+                            if (sample_inf_gen is not None):
+                                path = os.path.join(*[save_dir,
+                                               "sample_inferences", f"ep_{e}"])
+                                self.save_sample_inference(sess,
+                                                          sample_inf_gen, path)
 
         print(f"Done, final best loss: {best_loss:0.3f}")
         return {"best_ckpt": best_ckpt, "best_loss": best_loss}
 
-    def SaveSampleInference(self, sess, sample_inf_gen, save_dir):
+
+    def anneal_beta(self, step, annealing_epochs, steps_per_epoch, beta_max):
+        if annealing_epochs==0: return beta_max
+        return min(1.0, step/(annealing_epochs*steps_per_epoch)) * beta_max
+
+    def save_sample_inference(self, sess, sample_inf_gen, save_dir):
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
@@ -259,22 +289,3 @@ class Model:
                                               self.training: False})
         names = [a["image"] for a in batch["annotations"]]
         save_images(reconstructions, names, save_dir)
-
-"""
-    def Evaluate(self, eval_gen, checkpoint_path, save_figs=False, save_dir=None):
-        pass
-
-    def TrainingResults(self):
-        pass
-        #return self.train_loss, self.test_loss, self.test_acc
-
-    def Predict(self, images, checkpoint_path):
-        pass
-        #with tf.Session() as sess:
-        #    self.saver.restore(sess,checkpoint_path)
-        #    return sess.run([self.steering_probs, self.expected_bin], feed_dict={self.x:images, self.training: False})
-
-    def GetGraph(self):
-        return tf.get_default_graph().as_graph_def()
-
-"""
