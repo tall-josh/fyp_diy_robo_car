@@ -17,7 +17,7 @@ class DataGenerator(BaseDataGenerator):
         super().__init__(batch_size, data_set, image_dir,
                          anno_dir, shuffle=shuffle)
 
-        self.data = self.load_all_data(image_dir, anno_dir, data_set)
+        self.data = self.load_all_data(image_dir, anno_dir, data_set, num_bins=15)
 
         self.num_bins = num_bins
 
@@ -31,25 +31,33 @@ class DataGenerator(BaseDataGenerator):
             anno["steering"] = (self.num_bins-1)-anno["steering"]
         return image, anno
 
-    def all_annotations(self, sort=False):
-        annos  = {"steering": [], "throttle": []}
-        for name in self.data_set:
-            path = os.path.join(self.anno_dir, f"{name}.json")
-            anno = load_anno(path)
-            annos['steering'].append(anno['steering'])
-            annos['throttle'].append(anno['throttle'])
-        return annos
+    def augment(self, image, anno, num_bins):
+        '''
+        Mirror randomly, add some noise, pick up milk.
+        '''
+        if random.uniform(0.,1.) < 0.5:
+            image     = np.flip(image, 1)
+            anno["steering"] = (num_bins-1)-anno["steering"]
+#       TODO: AUGMENT
+        return image, anno
 
-    def load_all_data(self, image_dir, anno_dir, data_set):
+    def load_all_data(self, image_dir, anno_dir, data_set, num_bins):
         all_data = []
         pbar = tqdm(data_set)
         pbar.set_description("Loading Data")
         for name in pbar:
             im, an = load_image_anno_pair(image_dir, anno_dir, name)
-            im = self.normalize_image(im)
+            im = self.normalize_image(np.array(im))
             pair = {}
-            pair["image"]    = im
-            pair["anno"]     = an
+            an["steering"]          = bin_value(an["steering"],
+                                                num_bins,
+                                                val_range=1024)
+            im, an                  = self.augment(im, an, num_bins)
+            pair["original_image"]  = im
+            pair["anno"]            = an
+            pair["name"]            = name
+            # To Do, add noisy image or something
+            # pari["augmented_image"] = self.augment(im)
             all_data.append(pair)
         return all_data
 
@@ -59,27 +67,18 @@ class DataGenerator(BaseDataGenerator):
             return None, None
 
         i = self.current_step * self.batch_size
-        images = []
-        annos  = {"steering": [], "throttle": []}
+        batch = {"images"  : [],
+                 "annotations"      : [],
+                 "names"            : []}
         string = ""
         for ele in range(self.batch_size):
             pair     = self.data[self._indexes[i+ele]]
-            image    = pair["image"]
-            steering = pair["steering"]
-            throttle = pair["throttle"]
-            steering = bin_value(steering, self.num_bins, val_range=1024)
-            throttle = (throttle / 1024) - 0.5 # between +- 0.5
-
-            image, steering = self.augment(image, steering)
-            images.append(image)
-            annos['steering'].append(steering)
-            annos['throttle'].append(throttle)
-
+            batch["images"].append(pair["original_image"])
+            batch["annotations"].append(pair["anno"])
+            batch["names"].append(pair["name"])
         self.current_step += 1
 
         # if gray scale add single channel dim
-        if len(np.shape(images)) == 3:
-            images = np.expand_dims(images, axis=3)
-
-        return images, annos
-
+        if len(np.shape(batch["images"])) == 3:
+            batch["images"] = np.expand_dims(batch["images"], axis=3)
+        return batch

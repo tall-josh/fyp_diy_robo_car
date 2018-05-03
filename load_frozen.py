@@ -8,12 +8,8 @@ from vae_data_generator import DataGenerator
 from utils import *
 import numpy as np
 
-load_dir   = "z_freeze"
-frozen_path = os.path.join(load_dir, "frozen.pb")
-graph = None
-
 def load_graph(frozen_pb, prefix):
-  with tf.gfile.GFile(frozen_path, "rb") as f:
+  with tf.gfile.GFile(frozen_pb, "rb") as f:
     graph_def = tf.GraphDef()
     graph_def.ParseFromString(f.read())
 

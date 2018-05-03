@@ -1,1 +1,0 @@
-{"data_dir": "../data/clr_120_160/images/", "lr": 0.0001, "batch_size": 2015, "epochs": 100, "in_shape": [120, 160, 3], "best_ckpt": "vae_low_lr/ep_98_loss_2013277.500.ckpt", "message": "please work"}

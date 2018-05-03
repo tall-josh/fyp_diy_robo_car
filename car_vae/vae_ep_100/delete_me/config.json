@@ -1,1 +1,0 @@
-{"data_dir": "../data/clr_120_160/images/", "lr": 0.001, "batch_size": 2015, "epochs": 100, "in_shape": [120, 160, 3], "best_ckpt": "delete_me/ep_91_loss_93331.633.ckpt", "message": "please work"}
