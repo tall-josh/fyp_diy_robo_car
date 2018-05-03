@@ -7,22 +7,26 @@ sys.path.append("..")
 from vae_data_generator import DataGenerator
 from utils import *
 import numpy as np
+
 load_dir   = "z_freeze"
-frozen_path = os.path.join(load_dir, "FROZEN.pb")
+frozen_path = os.path.join(load_dir, "frozen.pb")
 graph = None
 
-def load_graph(frozen_pb):
+def load_graph(frozen_pb, prefix):
   with tf.gfile.GFile(frozen_path, "rb") as f:
     graph_def = tf.GraphDef()
     graph_def.ParseFromString(f.read())
 
   with tf.Graph().as_default() as graph:
-    tf.import_graph_def(graph_def, name="vae")
+    # When a frozen graph is restored, the tensors
+    # are accessed using:
+    #   graph.get_tensor_by_name("prefix/name_scope/name:0")
+    # for an example, see the main method below.
+    tf.import_graph_def(graph_def, name=prefix)
 
-  return graph
+    return graph
 
 if __name__ == "__main__":
-
   test = load_dataset("../data/evened_test.txt")
   image_dir   = "../data/clr_120_160/images"
   anno_dir    = "../data/clr_120_160/annotations"
@@ -36,16 +40,18 @@ if __name__ == "__main__":
                   num_bins=NUM_BINS)
   test_gen.reset(shuffle=False)
 
-  graph = load_graph(frozen_path)
+  graph = load_graph(frozen_path, prefix="vae")
   for op in graph.get_operations():
     print(op.name)
 
   x = graph.get_tensor_by_name("vae/x:0")
-  training = graph.get_tensor_by_name("vae/training:0")
+  b = graph.get_tensor_by_name("vae/beta:0")
+  t = graph.get_tensor_by_name("vae/training:0")
   z = graph.get_tensor_by_name("vae/sampling/z:0")
 
   with tf.Session(graph=graph) as sess:
     images = test_gen.get_next_batch()["original_images"]
-    emb = sess.run(z, feed_dict={x: images, training: False})
+    emb, _b, _t = sess.run([z, b, t], feed_dict={x: images})
+  print(f"b: {_b}, t: {_t}")
   print(np.shape(emb))
   print(emb)

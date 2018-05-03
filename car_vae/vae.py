@@ -14,7 +14,7 @@ from metrics import Metrics
 from utils import save_images
 
 class Model:
-    def __init__(self, in_shape, embedding_dim=50, num_projections=20):
+    def __init__(self, in_shape, lr=0.001, embedding_dim=50, num_projections=20):
         '''
         classes:  List of class names or integers corrisponding to each class being classified
                   by the network. ie: ['left', 'straight', 'right'] or [0, 1, 2]
@@ -27,20 +27,30 @@ class Model:
         tf.reset_default_graph()
         self.x = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="x")
         self.y = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="y")
-        self.training   = tf.placeholder(tf.bool, name="training")
-        self.new_beta = tf.placeholder(dtype=tf.float32)
-        self.beta = tf.get_variable("beta", dtype=tf.float32,
-                                    initializer=0.,
-                                    trainable=False)
-        self.new_embeddings = tf.placeholder(tf.float32,
-                                              shape=[None, self.embedding_dim])
-        self.embeddings     = tf.get_variable("embeddings",
-                                              dtype=tf.float32,
-                                              shape=
-                                             [self.num_projections,
-                                              self.embedding_dim],
+
+        self._training    = tf.placeholder(tf.bool)
+        self.training     = tf.get_variable("training", dtype=tf.bool,
+                                             initializer=True,
+                                             trainable=False)
+        self.set_training = self.training.assign(self._training)
+
+        self._beta        = tf.placeholder(dtype=tf.float32)
+        self.beta         = tf.get_variable("beta", dtype=tf.float32,
+                                             initializer=0.,
+                                             trainable=False)
+        self.update_beta  = self.beta.assign(self._beta)
+
+        self._embeddings  = tf.placeholder(tf.float32,
+                                           shape=[None, self.embedding_dim])
+        self.embeddings   = tf.get_variable("embeddings",
+                                             dtype=tf.float32,
+                                             shape=
+                                            [self.num_projections,
+                                             self.embedding_dim],
                                              initializer=tf.zeros_initializer(),
-                                              trainable=False)
+                                             trainable=False)
+        self.update_embeddings = self.embeddings.assign(self._embeddings)
+
         paddings = tf.constant([[0,0],[4,4],[0,0],[0,0]])
         relu    = tf.nn.relu
         sigmoid = tf.nn.sigmoid
@@ -134,25 +144,11 @@ class Model:
             tf.summary.scalar("rec_loss", tf.reduce_mean(self.rec_loss))
             tf.summary.scalar("beta", self.beta)
 
-        self.update_beta       = self.beta.assign(self.new_beta)
-        self.update_embeddings = self.embeddings.assign(self.new_embeddings)
-
-
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+        optimizer = tf.train.AdamOptimizer(learning_rate=lr)
         self.train_step = optimizer.minimize(self.loss, name="train_step")
 
         self.init_vars = tf.global_variables_initializer()
         self.saver = tf.train.Saver()
-
-#    def Infer(self, images, checkpoint_path, save_dir):
-#        with tf.Session() as sess:
-#            self.saver.restore(sess, checkpoint_path)
-#            reconstructions = sess.run(self.dec, feed_dict={self.x: images, self.training: False})
-#            for i, (image, recon) in enumerate(zip(images,reconstructions)):
-#                pass
-                # cv2.imwrite(os.path.join(save_dir, f"{i:001}_reconstruction.jpg"), recon)
-                # cv2.imwrite(os.path.join(save_dir, f"{i:001}_original.jpg"), image)
-#            return reconstructions, images
 
     def setup_meta(self, save_dir, test_gen):
         logs_path = os.path.join(save_dir, "train_logs")
@@ -184,8 +180,8 @@ class Model:
 
         logs_path = self.setup_meta(save_dir, test_gen)
 
-#        optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-#        train_step = optimizer.minimize(self.loss, name="train_step")
+        # Tensorboard
+        merge = tf.summary.merge_all()
 
         best_ckpt = ""
         with tf.Session() as sess:
@@ -203,19 +199,16 @@ class Model:
             global_step = 0.
             for e in range(epochs):
 
-
-                # Tensorboard
-                merge = tf.summary.merge_all()
-
                 # Begin Training
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                sess.run(self.set_training, feed_dict={self._training: True})
                 train_gen.reset()
                 t_train = trange(train_gen.steps_per_epoch)
                 t_train.set_description(f"Training Epoch: {e+1}")
                 for step in t_train:
                     _beta = self.anneal_beta(global_step, annealing_epochs,
                                             train_gen.steps_per_epoch, beta_max)
-                    sess.run(self.update_beta, feed_dict={self.new_beta: _beta})
+                    sess.run(self.update_beta, feed_dict={self._beta: _beta})
                     batch = train_gen.get_next_batch()
                     summary, _, loss, b = sess.run([merge, self.train_step,
                                                  self.loss, self.beta],
@@ -228,6 +221,7 @@ class Model:
 
                 # Begin Testing
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                sess.run(self.set_training, feed_dict={self._training: False})
                 embeddings      = []
                 test_gen.reset(shuffle=False)
                 t_test = trange(test_gen.steps_per_epoch)
@@ -244,7 +238,7 @@ class Model:
 
                 # Update embedding being plotted by tensorboard
                 sess.run(self.update_embeddings,
-                         feed_dict={self.new_embeddings:
+                         feed_dict={self._embeddings:
                                     embeddings[:self.num_projections]})
 
                 # Only begin saving checkpoints after beta is fully annealed
