@@ -1,11 +1,9 @@
-import sys
-sys.path.append('..')
-from modular_network import ClassifierModule
+from classifier_module import ClassifierModule
 import tensorflow as tf
 from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer as xavier
 import os
 from utils import *
-from behavoural_data_generator import DataGenerator
+from generators import BaseDataGenerator as DataGenerator
 import json
 
 def save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, best_ckpt, message):

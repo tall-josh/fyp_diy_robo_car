@@ -4,7 +4,7 @@ import tensorflow as tf
 import os
 import sys
 sys.path.append("..")
-from vae_data_generator import DataGenerator
+from generators import VaeDataGenerator as DataGenerator
 from utils import *
 import numpy as np
 

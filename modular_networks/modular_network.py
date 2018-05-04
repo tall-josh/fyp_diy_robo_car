@@ -1,9 +1,6 @@
 # NOTE:
 # http://cv-tricks.com/tensorflow-tutorial/save-restore-tensorflow-models-quick-complete-tutorial/
 
-import sys
-sys.path.append("..")
-from behavoural_data_generator import DataGenerator
 from utils import *
 from tqdm import trange
 import tensorflow as tf
@@ -13,7 +10,7 @@ from tensorflow.contrib.layers.python.layers.initializers import xavier_initiali
 from tensorflow.contrib.tensorboard.plugins import projector
 from load_frozen import load_graph
 
-class ClassifierModule():
+class Module(object):
 
   def __init__(self, encoder, layer_def, classes, lr=0.001):
     """
@@ -74,15 +71,12 @@ class ClassifierModule():
           _ = dropout(_, rate=drop, training=self.training)
 
       self.logits   = _
-      self.probs    = tf.nn.softmax(self.logits, name="probs")
-      self.expected = tf.reduce_sum(tf.multiply(self.probs, self.classes),
-                                    axis=1, name="expected")
-      self.loss     = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                        labels=self.y, logits=self.logits)
-      self.loss     = tf.reduce_mean(self.loss)
+      self.prediction = self.prediction()
+
+      self.loss     = self.loss_fn()
 
       # Tensorboard
-      tf.summary.scalar("total_loss", self.loss)
+      tf.summary.scalar("loss", self.loss)
 
       optimizer       = tf.train.AdamOptimizer(learning_rate=lr)
       self.train_step = optimizer.minimize(self.loss)
@@ -93,11 +87,12 @@ class ClassifierModule():
 
   def train(self, train_gen, test_gen, save_dir, epochs):
 
-
     with tf.Session(graph=self.graph) as sess:
       # Tensorboard
       merge = tf.summary.merge_all()
-      train_writer = tf.summary.FileWriter(save_dir, sess.graph)
+
+      train_writer = tf.summary.FileWriter(save_dir+"/logdir/train", sess.graph)
+      test_writer  = tf.summary.FileWriter(save_dir+"/logdir/test")
 
       # some big number
       best_loss = 10**9.0
@@ -115,7 +110,6 @@ class ClassifierModule():
         t_train = trange(train_gen.steps_per_epoch)
         t_train.set_description(f"Training Epoch: {e+1}")
 
-        global_step=0
         for step in t_train:
           batch = train_gen.get_next_batch()
           images = batch["images"]
@@ -128,4 +122,30 @@ class ClassifierModule():
           # Tensorboard
           train_writer.add_summary(summary, global_step)
           global_step += 1
+
+        # Begin Testing
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        sess.run(self.set_training, feed_dict={self._training: False})
+        test_gen.reset()
+        t_test = trange(test_gen.steps_per_epoch)
+        t_test.set_description(f"Testing Epoch: {e+1}")
+
+        for step in t_test:
+          batch = test_gen.get_next_batch()
+          images = batch["images"]
+          steering = [ele["steering"] for ele in batch["annotations"]]
+
+          _, summary = sess.run([self.loss, merge],
+                                 feed_dict={self.x: images,
+                                            self.y: steering})
+          # Tensorboard
+          test_writer.add_summary(summary, global_step)
+          global_step += 1
+
+
+  def prediction(self):
+    pass
+
+  def loss_fn(self):
+    pass
 
