@@ -10,7 +10,7 @@ from tensorflow.contrib.layers.python.layers.initializers import xavier_initiali
 from tensorflow.contrib.tensorboard.plugins import projector
 from load_frozen import load_graph
 
-class Module(object):
+class BaseModule(object):
 
   def __init__(self, encoder, layer_def, classes, lr=0.001):
     """
@@ -71,7 +71,7 @@ class Module(object):
           _ = dropout(_, rate=drop, training=self.training)
 
       self.logits   = _
-      self.prediction = self.prediction()
+      self.prediction = self.make_prediction()
 
       self.loss     = self.loss_fn()
 
@@ -111,14 +111,12 @@ class Module(object):
         t_train.set_description(f"Training Epoch: {e+1}")
 
         for step in t_train:
-          batch = train_gen.get_next_batch()
-          images = batch["images"]
-          steering = [ele["steering"] for ele in batch["annotations"]]
+          _x, _y = self.prepare_data(train_gen)
 
           _, loss, summary = sess.run([self.train_step,
                                        self.loss, merge],
-                                       feed_dict={self.x: images,
-                                                  self.y: steering})
+                                       feed_dict={self.x: _x,
+                                                  self.y: _y})
           # Tensorboard
           train_writer.add_summary(summary, global_step)
           global_step += 1
@@ -131,19 +129,18 @@ class Module(object):
         t_test.set_description(f"Testing Epoch: {e+1}")
 
         for step in t_test:
-          batch = test_gen.get_next_batch()
-          images = batch["images"]
-          steering = [ele["steering"] for ele in batch["annotations"]]
+          _x, _y = self.prepare_data(test_gen)
 
           _, summary = sess.run([self.loss, merge],
-                                 feed_dict={self.x: images,
-                                            self.y: steering})
+                                 feed_dict={self.x: _x,
+                                            self.y: _y})
           # Tensorboard
           test_writer.add_summary(summary, global_step)
           global_step += 1
 
-
-  def prediction(self):
+  def prepare_data(self):
+    pass
+  def make_prediction(self):
     pass
 
   def loss_fn(self):

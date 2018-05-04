@@ -1,11 +1,22 @@
-from classifier_module import ClassifierModule
+from concrete_modules import ThrottleModule as Module
 import tensorflow as tf
 from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer as xavier
 import os
 from utils import *
 from generators import BaseDataGenerator as DataGenerator
 import json
-
+'''
+    layer_def.append({"neurons"     : 30,
+                       "activation" : tf.nn.relu,
+                       "name"       : "mod1",
+                       "init"       : xavier(),
+                       "dropout"    : 1.})
+    layer_def.append({"neurons"     : 15,
+                       "activation" : None,
+                       "name"       : "logits",
+                       "init"       : xavier(),
+                       "dropout"    : 1.})
+'''
 def save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, best_ckpt, message):
     payload = {}
     payload["data_dir"]    = data_dir
@@ -21,9 +32,6 @@ def save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, 
     with open(path, 'w') as f:
         json.dump(payload, f)
 
-'''-----      Behavoural      -----
-Poop
-'''
 def main():
     import argparse as argparse
     parser = argparse.ArgumentParser()
@@ -90,13 +98,13 @@ def main():
                        "name"       : "mod1",
                        "init"       : xavier(),
                        "dropout"    : 1.})
-    layer_def.append({"neurons"     : 15,
+    layer_def.append({"neurons"     : 1,
                        "activation" : None,
                        "name"       : "logits",
                        "init"       : xavier(),
                        "dropout"    : 1.})
 
-    car_brain   = ClassifierModule(encoder, layer_def, classes=classes)
+    car_brain   = Module(encoder, layer_def, classes=classes)
     best_ckpt   = car_brain.train(train_gen, test_gen, save_dir, epochs)
 
 
