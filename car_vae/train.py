@@ -1,7 +1,8 @@
 from vae import Model
 import os
 from utils import *
-from vae_data_generator import DataGenerator
+from generator import DataGenerator, preprocess_normalize_images_bin_annos
+from generator import prepare_batch_images_and_labels
 import json
 
 '''
@@ -58,38 +59,40 @@ def main():
     parser.add_argument('--message', type=str, required=True,
                        help="an reminder or other data you may need to \
                              identify the training run later.")
-    NUM_BINS    = 15
     args        = parser.parse_args()
     data_dir    = args.data_dir
     image_dir   = os.path.join(data_dir, "images")
     anno_dir    = os.path.join(data_dir, "annotations")
     train_path  = args.train_txt
     test_path   = args.test_txt
+    batch_size  = args.batch_size
 
     # Load list of image names for train and test
-    train       = load_dataset(train_path)
-    test        = load_dataset(test_path)
+    raw_train       = load_dataset(train_path)
+    raw_test        = load_dataset(test_path)
 
 
     # Create train and test generators
-    batch_size  = args.batch_size
     train_gen   = DataGenerator(batch_size=batch_size,
-                      data_set=train[:100],
+                      data_set=raw_train[:200],
                       image_dir=image_dir,
                       anno_dir=anno_dir,
-                      num_bins=NUM_BINS)
+                      preprocess_fn=preprocess_normalize_images_bin_annos,
+                      prepare_batch_fn=prepare_batch_images_and_labels)
 
     test_gen    = DataGenerator(batch_size=batch_size,
-                      data_set=test[:50],
+                      data_set=raw_test[:50],
                       image_dir=image_dir,
                       anno_dir=anno_dir,
-                      num_bins=NUM_BINS)
+                      preprocess_fn=preprocess_normalize_images_bin_annos,
+                      prepare_batch_fn=prepare_batch_images_and_labels)
 
     sample_gen  = DataGenerator(batch_size=10,
-                      data_set=test[:10],
+                      data_set=raw_test[:10],
                       image_dir=image_dir,
                       anno_dir=anno_dir,
-                      num_bins=NUM_BINS,
+                      preprocess_fn=preprocess_normalize_images_bin_annos,
+                      prepare_batch_fn=prepare_batch_images_and_labels,
                       shuffle=False)
 
     # Save the config to a file

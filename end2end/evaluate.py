@@ -34,15 +34,15 @@ def main():
     num_bins    = config["num_bins"]
     # Load list of image names for train and test
     raw_eval    = load_dataset(eval_path)
-    
+
     # Create train and test generators
     batch_size  = config['batch_size']
-    eval_gen    = DataGenerator(batch_size=batch_size, 
+    eval_gen    = DataGenerator(batch_size=batch_size,
                       data_set=raw_eval,
                       image_dir=image_dir,
-                      anno_dir=anno_dir, 
+                      anno_dir=anno_dir,
                       num_bins=num_bins)
-    
+
     # Kick-off
     save_dir    = args.config_dir
     in_shape    = config['in_shape']
@@ -50,7 +50,7 @@ def main():
     classes     = [i for i in range(num_bins)]
     car_brain   = Model(in_shape, classes=classes)
     evaluation  = car_brain.Evaluate(eval_gen, ckpt, save_figs=True, save_dir=os.path.join(save_dir, "eval"))
-    
+
 
 if __name__ == "__main__":
     main()

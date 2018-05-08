@@ -7,11 +7,27 @@ from tensorflow.contrib.tensorboard.plugins import projector
 from tqdm import trange, tqdm
 import numpy as np
 import os
-import sys
-sys.path.append('..')
 #from show_graph import show_graph
+import json
 from metrics import Metrics
 from utils import save_images
+from freeze_graph import freeze_meta, write_tensor_dict_to_json, load_tensor_names
+
+INPUTS              = "inputs"
+OUTPUTS             = "outputs"
+IMAGE_INPUT         = "image_input"
+EMBEDDING           = "embedding"
+RECONSTRUCTION      = "reconstruction"
+tensor_dict = {INPUTS  : {IMAGE_INPUT    : ""},
+               OUTPUTS : {EMBEDDING      : "",
+                          RECONSTRUCTION : ""}}
+'''
+intput_or_output = "input" or "output"
+key: "descriptive name"
+tensor: the tensorflow tensor
+'''
+def update_tensor_dict(input_or_output, key, tensor):
+    tensor_dict[input_or_output][key] = tensor.name
 
 class Model:
     def __init__(self, in_shape, lr=0.001, embedding_dim=50, num_projections=20):
@@ -121,7 +137,7 @@ class Model:
 
             dec7  = conv2d_transpose(dec6, 3,  (5,5), (2,2), "same",
                                          activation=None, name="dec8")
-            self.dec  = relu(dec7)
+            self.dec  = relu(dec7, name="reconstruction")
 
         with tf.name_scope("loss"):
             # # VAE Loss
@@ -143,6 +159,10 @@ class Model:
             tf.summary.scalar("kl_loss", tf.reduce_mean(self.kl_loss))
             tf.summary.scalar("rec_loss", tf.reduce_mean(self.rec_loss))
             tf.summary.scalar("beta", self.beta)
+
+        update_tensor_dict(INPUTS,  IMAGE_INPUT,    self.x)
+        update_tensor_dict(OUTPUTS, EMBEDDING,      self.z)
+        update_tensor_dict(OUTPUTS, RECONSTRUCTION, self.dec)
 
         optimizer = tf.train.AdamOptimizer(learning_rate=lr)
         self.train_step = optimizer.minimize(self.loss, name="train_step")
@@ -175,9 +195,12 @@ class Model:
         return logs_path
 
 
-    def train(self, train_gen, test_gen, save_dir, epochs=10, lr=0.001,
+    def train(self, train_gen, test_gen, save_dir, epochs=10,
               sample_inf_gen=None, annealing_epochs=0, beta_max=1):
-
+        return_info = {"graph_path"    : "",
+                        "ckpt_path"    : "",
+                        "out_path"     : save_dir,
+                        "tensor_json"  : ""}
         logs_path = self.setup_meta(save_dir, test_gen)
 
         # Tensorboard
@@ -209,12 +232,11 @@ class Model:
                     _beta = self.anneal_beta(global_step, annealing_epochs,
                                             train_gen.steps_per_epoch, beta_max)
                     sess.run(self.update_beta, feed_dict={self._beta: _beta})
-                    batch = train_gen.get_next_batch()
+                    ims, _, _ = prepare_data(train_gen)
                     summary, _, loss, b = sess.run([merge, self.train_step,
                                                  self.loss, self.beta],
-                               feed_dict={self.x: batch["augmented_images"],
-                                          self.y: batch["original_images"],
-                                          self.training: True})
+                               feed_dict={self.x: ims,
+                                          self.y: ims})
                     train_writer.add_summary(summary, global_step)
                     global_step += 1
                     print(f"beta: {b}")
@@ -226,13 +248,14 @@ class Model:
                 test_gen.reset(shuffle=False)
                 t_test = trange(test_gen.steps_per_epoch)
                 t_test.set_description('Testing')
+                loss = []
                 for _ in t_test:
-                    batch = test_gen.get_next_batch()
-                    loss, zeds = sess.run([self.loss, self.z],
-                               feed_dict={self.x: batch["augmented_images"],
-                                          self.y: batch["original_images"],
-                                          self.training: False})
+                    ims, _, _ = prepare_data(test_gen)
+                    _loss, zeds = sess.run([self.loss, self.z],
+                               feed_dict={self.x: ims,
+                                          self.y: ims})
                     embeddings.extend(zeds)
+                    loss.append(_loss)
                 # House keeping
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -242,21 +265,27 @@ class Model:
                                     embeddings[:self.num_projections]})
 
                 # Only begin saving checkpoints after beta is fully annealed
-                if e >= annealing_epochs:
+                if e+1 >= annealing_epochs:
                     # only need to save graph once, then save the weights
                     # at each improving epoch
-                    if e == annealing_epochs:
-                        path = os.path.join(save_dir, "model_def")
-                        self.saver.export_meta_graph(path + ".meta")
+                    if e+1 == annealing_epochs:
+                        path = os.path.join(save_dir, "graph.meta")
+                        self.saver.export_meta_graph(path)
+                        return_info["graph_path"] = os.path.abspath(path)
+
+                        path = write_tensor_dict_to_json(save_dir, tensor_dict)
+                        return_info["tensor_json"] = os.path.abspath(path)
+
                     # If we have a new best loss then save the ckpt and some
                     # sample inferences
                     cur_loss = np.mean(loss)
                     print(f"Test Loss: {cur_loss:0.3f}\n" + 50*"-")
                     if cur_loss < best_loss:
                             best_loss = cur_loss
-                            path = f"{save_dir}/ep_{e+1}_loss_{best_loss:0.3f}"
-                            best_ckpt = self.saver.save(sess, path + ".ckpt",
+                            path = f"{save_dir}/ep_{e+1}.ckpt"
+                            best_ckpt = self.saver.save(sess, path,
                                                         write_meta_graph=False)
+                            return_info["ckpt_path"]=os.path.abspath(best_ckpt)
                             print("Model saved at {}".format(best_ckpt))
                             if (sample_inf_gen is not None):
                                 path = os.path.join(*[save_dir,
@@ -265,7 +294,9 @@ class Model:
                                                           sample_inf_gen, path)
 
         print(f"Done, final best loss: {best_loss:0.3f}")
-        return {"best_ckpt": best_ckpt, "best_loss": best_loss}
+        return_info["final_loss"] = float(best_loss)
+        json.dump(return_info, open(save_dir+"/return_info.json", 'w'))
+        return return_info
 
 
     def anneal_beta(self, step, annealing_epochs, steps_per_epoch, beta_max):
@@ -279,7 +310,24 @@ class Model:
         batch = sample_inf_gen.get_next_batch()
         sample_inf_gen.reset(shuffle=False)
         reconstructions = sess.run(self.dec,
-                                   feed_dict={self.x: batch["original_images"],
-                                              self.training: False})
-        names = [a["image"] for a in batch["annotations"]]
+                                   feed_dict={self.x: batch["images"]})
+        names = batch["names"]
         save_images(reconstructions, names, save_dir)
+
+# Static methods        
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def prepare_data(generator):
+    batch    = generator.get_next_batch()
+    # ToDo:
+    # Add some noice to images maybe???
+    
+    images   = batch["images"]
+    steering = [ele["steering"] for ele in batch["annotations"]]
+    throttle = [ele["throttle"] for ele in batch["annotations"]]
+    return images, steering, throttle
+
+# def forward_pass(graph, input_tensor_name, output_tensor_names, vector_batch):
+#     with tf.Session(graph=graph) as sess:
+#         return sess.run(output_tensor_names, 
+#                         feed_dict={input_tensor_name: vector_batch})

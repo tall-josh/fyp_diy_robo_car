@@ -9,6 +9,17 @@ from tensorflow.python.layers.convolutional import conv2d, conv2d_transpose
 from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer as xavier
 from tensorflow.contrib.tensorboard.plugins import projector
 from load_frozen import load_graph
+from freeze_graph import freeze_meta, write_tensor_dict_to_json, load_tensor_names
+INPUTS              = "inputs"
+OUTPUTS             = "outputs"
+IMAGE_INPUT         = "image_input"
+PREDICTION          = "prediction"
+tensor_dict = {INPUTS  : {IMAGE_INPUT : ""},
+               OUTPUTS : {PREDICTION  : ""}}
+
+
+def update_tensor_dict(input_or_output, key, tensor):
+  tensor_dict[input_or_output][key] = tensor.name
 
 class BaseModule(object):
 
@@ -82,11 +93,17 @@ class BaseModule(object):
       self.train_step = optimizer.minimize(self.loss)
       self.init_vars  = tf.global_variables_initializer()
 
+      update_tensor_dict(INPUTS,  IMAGE_INPUT, self.x)
+      update_tensor_dict(OUTPUTS, PREDICTION, self.prediction)
+
       self.saver = tf.train.Saver()
       self.graph = graph
 
   def train(self, train_gen, test_gen, save_dir, epochs):
-
+    return_info = {"graph_path"    : "",
+                   "ckpt_path"    : "",
+                   "out_path"     : save_dir,
+                   "tensor_json"  : ""}
     with tf.Session(graph=self.graph) as sess:
       # Tensorboard
       merge = tf.summary.merge_all()
@@ -101,6 +118,7 @@ class BaseModule(object):
       sess.run(self.init_vars)
 
       global_step = 0
+      first_save = True
       for e in range(epochs):
 
         # Begin Training
@@ -127,22 +145,47 @@ class BaseModule(object):
         test_gen.reset()
         t_test = trange(test_gen.steps_per_epoch)
         t_test.set_description(f"Testing Epoch: {e+1}")
-
+        loss = []
         for step in t_test:
           _x, _y = self.prepare_data(test_gen)
 
-          _, summary = sess.run([self.loss, merge],
+          _loss, summary = sess.run([self.loss, merge],
                                  feed_dict={self.x: _x,
                                             self.y: _y})
+          loss.append(_loss)
+          cur_loss = np.mean(loss)
+          if cur_loss < best_loss:
+            best_loss = cur_loss
+            path = f"{save_dir}/ep_{e+1}.ckpt"
+            best_ckpt = self.saver.save(sess, path, write_meta_graph=False)
+            return_info["ckpt_path"]=os.path.abspath(best_ckpt)
+            print("Model saved at {}".format(best_ckpt))
+
+            if first_save:
+              path = os.path.join(save_dir, "graph.meta")
+              self.saver.export_meta_graph(path)
+              return_info["graph_path"] = os.path.abspath(path)
+
+              path = write_tensor_dict_to_json(save_dir, tensor_dict)
+              return_info["tensor_json"] = os.path.abspath(path)
+              first_save=False
+
           # Tensorboard
           test_writer.add_summary(summary, global_step)
           global_step += 1
+      print(f"Done, final best loss: {best_loss:0.3f}")
+      return_info["final_loss"] = float(best_loss)
+      json.dump(return_info, open(save_dir+"/return_info.json", 'w'))
+      return return_info
 
   def prepare_data(self):
     pass
+
   def make_prediction(self):
     pass
 
   def loss_fn(self):
     pass
 
+  def update_tensor_dict(input_or_output, key, tensor):
+    pass

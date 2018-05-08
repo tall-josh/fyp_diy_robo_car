@@ -1,7 +1,8 @@
 from tf_donkey import Model
 import os
 from utils import *
-from behavoural_data_generator import DataGenerator
+from generator import DataGenerator, preprocess_normalize_images_bin_annos
+from generator import prepare_batch_images_and_labels
 import json
 
 '''
@@ -68,16 +69,17 @@ def main():
     num_bins    = args.num_bins
     batch_size  = args.batch_size
     train_gen   = DataGenerator(batch_size=batch_size,
-                      data_set=raw_train,
+                      data_set=raw_train[:200],
                       image_dir=image_dir,
                       anno_dir=anno_dir,
-                      num_bins=num_bins)
-
+                      preprocess_fn=preprocess_normalize_images_bin_annos,
+                      prepare_batch_fn=prepare_batch_images_and_labels)
     test_gen    = DataGenerator(batch_size=batch_size,
-                      data_set=raw_test,
+                      data_set=raw_test[:50],
                       image_dir=image_dir,
                       anno_dir=anno_dir,
-                      num_bins=num_bins)
+                      preprocess_fn=preprocess_normalize_images_bin_annos,
+                      prepare_batch_fn=prepare_batch_images_and_labels)
 
     # Kick-off
     #name        = args.name
@@ -87,15 +89,15 @@ def main():
     lr          = args.lr
     classes     = [i for i in range(num_bins)]
     message     = args.message
-    
-    assert_message = "Name must be unique, This will be the name of the dir we'll used to save checkpoints"
-    assert not os.path.exists(save_dir), "{}: {}".format(assert_message, save_dir)
-    os.makedirs(save_dir)
-    
+
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
     best_ckpt   = "must have crashed during training :-("
-    save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs, in_shape, best_ckpt,  message)
+    save_config(save_dir, data_dir, num_bins, lr, batch_size, epochs,
+                in_shape, best_ckpt,  message)
     car_brain   = Model(in_shape, classes=classes)
-    best_ckpt   = car_brain.Train(train_gen, test_gen, save_dir, epochs=epochs)
+    best_ckpt   = car_brain.train(train_gen, test_gen, save_dir, epochs=epochs)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,10 @@
 
+'''
+python freeze_graph.py --ckpt-path "./end2end/z_donk/ep_6_loss_3.4e+02_bins_15.ckpt"
+                       --graph-path "./end2end/z_donk/model.ckpt.meta"
+                       --out-path "./end2end/z_donk/frozne.pb"
+                       --outputs "donkey/throttle/Sigmoid" "donkey/steering_prediction"
+'''
 import time
 import socket
 import cv2
@@ -9,20 +15,37 @@ from tensorflow.contrib.layers.python.layers.initializers import xavier_initiali
 from tqdm import trange, tqdm
 import numpy as np
 import os
-import sys
-sys.path.append('..')
+import json
 #from show_graph import show_graph
 from metrics import Metrics
+from freeze_graph import freeze_meta, write_tensor_dict_to_json, load_tensor_names
+
+
+INPUTS              = "inputs"
+OUTPUTS             = "outputs"
+IMAGE_INPUT         = "image_input"
+STEERING_PREDICTION = "steering_prediction"
+STEERING_PROBS      = "steering_probs"
+THROTTLE_PREDICTION = "throttle_prediction"
+tensor_dict = {INPUTS  : {IMAGE_INPUT         : ""},
+               OUTPUTS : {STEERING_PREDICTION : "",
+                          STEERING_PROBS      : "",
+                          THROTTLE_PREDICTION : ""}}
+
+'''
+intput_or_output = "input" or "output"
+key: "descriptive name"
+tensor: the tensorflow tensor
+'''
+def update_tensor_dict(input_or_output, key, tensor):
+    tensor_dict[input_or_output][key] = tensor.name
 
 class Model:
-    def __init__(self, in_shape, classes):
+    def __init__(self, in_shape, classes, lr=0.001):
         '''
         classes:  List of class names or integers corrisponding to each class being classified
                   by the network. ie: ['left', 'straight', 'right'] or [0, 1, 2]
         '''
-        print(f"in_shape:           {in_shape}")
-        print(f"classes:             {classes}")
-
         # Define classes
         self.num_bins = len(classes)
         self.classes = np.array(classes, np.float32)
@@ -31,188 +54,134 @@ class Model:
         # Define model
         tf.reset_default_graph()
         self.x = tf.placeholder(tf.float32, shape=[None,]+in_shape, name="input")
-        self.y_steering = tf.placeholder(tf.int32,   shape=(None,), name="label_steering")
-        self.y_throttle = tf.placeholder(tf.float32, shape=(None,), name="label_throttle")
-        self.training = tf.placeholder(tf.bool, name="training")
+        self.y_steering = tf.placeholder(tf.int32,   shape=(None,))
+        self.y_throttle = tf.placeholder(tf.float32, shape=(None,))
+        self._training = tf.placeholder(tf.bool)
+        self.training  = tf.get_variable("training", dtype=tf.bool,
+                                          initializer=True, trainable=False)
+        self.set_training = self.training.assign(self._training)
+
         relu    = tf.nn.relu
         sigmoid = tf.nn.sigmoid
-        with tf.name_scope("encoder"):
+        with tf.name_scope("donkey"):
             #            input   num  conv   stride   pad
-            enc = conv2d(self.x, 24,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc1")
-            enc = conv2d( enc,   32,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc2")
-            enc = conv2d( enc,   64,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc3")
-            enc = conv2d( enc,   64,  (3,3), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="enc4")
-            enc = conv2d( enc,   64,  (3,3), (1,1),  "same", activation=relu, kernel_initializer=xavier(), name="enc5")
-            enc = flatten(enc)
+            conv = conv2d(self.x, 24,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="conv1")
+            conv = conv2d( conv,   32,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="conv2")
+            conv = conv2d( conv,   64,  (5,5), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="conv3")
+            conv = conv2d( conv,   64,  (3,3), (2,2),  "same", activation=relu, kernel_initializer=xavier(), name="conv4")
+            conv = conv2d( conv,   64,  (3,3), (1,1),  "same", activation=relu, kernel_initializer=xavier(), name="conv5")
+            conv = flatten(conv)
             #             in   num
-            enc = dense(  enc, 100, activation=relu, kernel_initializer=xavier(), name="enc6")
-            enc = dropout(enc, rate=0.1, training=self.training)
+            conv = dense(  conv, 100, activation=relu, kernel_initializer=xavier(), name="fc1")
+            conv = dropout(conv, rate=0.1, training=self.training)
 
-            enc = dense(  enc, 50, activation=relu, kernel_initializer=xavier(), name="enc7")
-            enc = dropout(enc, rate=0.1, training=self.training)
+            conv = dense(  conv, 50, activation=relu, kernel_initializer=xavier(), name="fc2")
+            conv = dropout(conv, rate=0.1, training=self.training)
 
             # Steering
-            self.logits = dense(enc, self.num_bins, activation=None, kernel_initializer=xavier(), name="logits")
-            self.steering_probs = tf.nn.softmax(self.logits, name="steering")
-            self.expected_bin = tf.reduce_sum(tf.multiply(self.steering_probs, self.classes), axis=1)
+            self.logits = dense(conv, self.num_bins, activation=None, kernel_initializer=xavier(), name="logits")
+            self.steering_probs = tf.nn.softmax(self.logits, name="steeringi_probs")
+            self.steering_prediction = tf.reduce_sum(tf.multiply(self.steering_probs, self.classes),
+                                                     axis=1, name="steering_prediction")
 
             # Throttle
-            self.throttle = dense(enc, 1, sigmoid, kernel_initializer=xavier(), name="throttle")
+            self.throttle = dense(conv, 1, sigmoid, kernel_initializer=xavier(), name="throttle")
+
+            # keep tensor names for easy freezing/loading later
+            update_tensor_dict(INPUTS , IMAGE_INPUT, self.x)
+            update_tensor_dict(OUTPUTS, STEERING_PREDICTION, self.steering_prediction)
+            update_tensor_dict(OUTPUTS, STEERING_PROBS, self.steering_probs)
+            update_tensor_dict(OUTPUTS, THROTTLE_PREDICTION, self.throttle)
+
         with tf.name_scope("loss"):
             self.loss_steering = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y_steering, logits=self.logits)
             self.loss_steering = tf.reduce_mean(self.loss_steering)
             self.loss_throttle = tf.reduce_mean((self.throttle - self.y_throttle)**2)
             self.loss = 0.9*self.loss_steering + 0.001*self.loss_throttle
 
-
-        self.saver = tf.train.Saver()
-
-    def Train(self, train_gen, test_gen, save_dir, epochs=10, lr=0.001, restart_ckpt=None):
+        tf.summary.scalar("weighted_loss", self.loss)
+        tf.summary.scalar("steering_loss", self.loss_steering)
+        tf.summary.scalar("throttle_loss", self.loss_throttle)
 
         optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-        train_step = optimizer.minimize(self.loss)
+        self.train_step = optimizer.minimize(self.loss)
 
-        self.train_loss = {"total": [], "steering": [], "throttle" : []}
-        self.test_loss  = {"total": [], "steering": [], "throttle" : []}
+        self.init_vars = tf.global_variables_initializer()
+        self.saver = tf.train.Saver()
+
+
+    def train(self, train_gen, test_gen, save_dir, epochs=10, restart_ckpt=None):
+        return_info = {"graph_path"    : "",
+                        "ckpt_path"    : "",
+                        "out_path"     : save_dir,
+                        "tensor_json"  : ""}
+        first_save=True
         best_ckpt = ""
         with tf.Session() as sess:
-            sess.run(tf.global_variables_initializer())
-            if restart_ckpt is not None:
-                self.saver.restore(sess,restart_ckpt)
-            best_loss = 10**9  # some big number
+            merge = tf.summary.merge_all()
+            train_writer = tf.summary.FileWriter(save_dir+"/logdir/train", sess.graph)
+            test_writer  = tf.summary.FileWriter(save_dir+"/logdir/test")
 
+            # Init
+            sess.run(self.init_vars)
+
+            # some big number
+            best_loss = 10**9
+
+            global_step = 0
             for e in range(epochs):
-                temp_train_loss = []
+                sess.run(self.set_training, feed_dict={self._training: True})
                 train_gen.reset()
                 t_train = trange(train_gen.steps_per_epoch)
                 t_train.set_description(f"Training Epoch: {e+1}")
                 for step in t_train:
-                    images, annos = train_gen.get_next_batch()
-                    _, loss, steer, throt = sess.run([train_step, self.loss, self.loss_steering, self.loss_throttle],
-                               feed_dict={self.x: images,
-                                          self.y_steering: annos['steering'],
-                                          self.y_throttle: annos['throttle'],
-                                          self.training: True})
-                    temp_train_loss.append(np.array([loss, steer, throt]))
+                    images, steering, throttle = prepare_data(train_gen)
+                    _, summary = sess.run([self.train_step, merge],
+                                feed_dict={self.x         : images,
+                                           self.y_steering: steering,
+                                           self.y_throttle: throttle})
+                    train_writer.add_summary(summary, global_step)
+                    global_step += 1
 
-                means = np.mean(np.array(temp_train_loss), axis=0)
-                self.train_loss["total"].append(means[0])
-                self.train_loss["steering"].append(means[1])
-                self.train_loss["throttle"].append(means[2])
+
+                sess.run(self.set_training, feed_dict={self._training: False})
                 test_gen.reset()
-                batch_test_loss = []
-
                 t_test = trange(test_gen.steps_per_epoch)
                 t_test.set_description('Testing')
+                test_loss = []
                 for _ in t_test:
-                    images, annos = test_gen.get_next_batch()
-                    loss, steer, throt = sess.run([self.loss, self.loss_steering, self.loss_throttle],
-                           feed_dict={self.x: images,
-                                      self.y_steering: annos['steering'],
-                                      self.y_throttle: annos['throttle'],
-                                      self.training: False})
+                    images, steering, throttle = prepare_data(test_gen)
+                    _loss, summary = sess.run([self.loss, merge],
+                                feed_dict={self.x         : images,
+                                           self.y_steering: steering,
+                                           self.y_throttle: throttle})
+                    test_loss.append(_loss)
+                    test_writer.add_summary(summary, global_step)
+                    global_step += 1
 
-                    batch_test_loss.append(np.array([loss, steer, throt]))
-
-                print(f"shape: {np.shape(batch_test_loss)}")
-                means = np.mean(np.array(batch_test_loss), axis=0)
-                self.test_loss["total"].append(means[0])
-                self.test_loss["steering"].append(means[1])
-                self.test_loss["throttle"].append(means[2])
-                cur_mean_loss = means[0]
-                print(f"Test Loss: {cur_mean_loss}")
+                cur_mean_loss = np.mean(test_loss)
                 print("-"*50)
                 if cur_mean_loss < best_loss:
+                        if first_save:
+                            path = f"{save_dir}/graph.meta"
+                            self.saver.export_meta_graph(path)
+                            return_info["graph_path"] = os.path.abspath(path)
+
+                            path = write_tensor_dict_to_json(save_dir, tensor_dict)
+                            return_info["tensor_json"] = os.path.abspath(path)
+                            first_save=False
                         best_loss = cur_mean_loss
-                        path = f"{save_dir}/ep_{e+1}_loss_{cur_mean_loss:0.3}_bins_{self.num_bins}.ckpt"
-                        best_ckpt = self.saver.save(sess, path)
+                        path = f"{save_dir}/ep_{e+1}.ckpt"
+                        best_ckpt = self.saver.save(sess, path, write_meta_graph=False)
+                        return_info["ckpt_path"] = os.path.abspath(best_ckpt)
                         print("Model saved at {}".format(best_ckpt))
 
-        self.SaveLossPlots(save_dir)
         print(f"Done, final best loss: {best_loss:0.3}")
-        return best_ckpt
+        return_info["final_loss"] = float(best_loss)
+        json.dump(return_info, open(save_dir+"/return_info.json", 'w'))
+        return return_info
 
-    def SaveLossPlots(self, save_dir):
-        import matplotlib.pyplot as plt
-        import json
-
-        for loss_type in self.train_loss.keys():
-            # print(f"Train: {self.train_loss}")
-            # print(f"Test:  {self.test_loss}")
-            fig = plt.figure(figsize=(8,6))
-            plt.plot(self.train_loss[loss_type], 'b-',  label="train")
-            plt.plot(self.test_loss[loss_type],  'r--', label="test")
-            plt.title(f'{loss_type} loss during training')
-            plt.xlabel("Loss")
-            plt.ylabel("Epoch")
-            plt.legend()
-            path = os.path.join(save_dir, f"{loss_type}_training_loss.jpg")
-            fig.savefig(path)
-
-            # Need to convet from numpy.float32 to native float32 for serialization
-            self.train_loss[loss_type] = [float(x) for x in self.train_loss[loss_type]]
-            self.test_loss[loss_type]  = [float(x) for x in self.test_loss[loss_type]]
-        with open(os.path.join(save_dir, "train.json"), 'w') as f:
-            json.dump(self.train_loss, f)
-        with open(os.path.join(save_dir, "test.json"), 'w') as f:
-            json.dump(self.test_loss, f)
-
-    def Evaluate(self, eval_gen, checkpoint_path, save_figs=False, save_dir=None):
-
-        if save_figs:
-            assert save_dir is not None, "If you want to save the evaluation figs, you'll need to provide a save_dir."
-
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-
-        eval_gen.reset(shuffle=False)
-        metrics = Metrics(self.classes)
-        with tf.Session() as sess:
-            self.saver.restore(sess,checkpoint_path)
-
-            t_train = trange(eval_gen.steps_per_epoch)
-            t_train.set_description("Evaluating your face!")
-            for step in t_train:
-                images, annos = eval_gen.get_next_batch()
-                steering_probs, expected_bin, throttle = sess.run([self.steering_probs, self.expected_bin, self.throttle],
-                           feed_dict={self.x: images, self.training: False})
-                metrics.update(steering_probs, expected_bin, throttle, annos)
-
-        result = metrics.compute_metrics()
-
-        if save_figs:
-            metrics.SaveEvalFigs(result, save_dir)
-
-        return result
-
-
-    def TrainingResults(self):
-        return self.train_loss, self.test_loss, self.test_acc
-
-    def Predict(self, images, checkpoint_path):
-        with tf.Session() as sess:
-            self.saver.restore(sess,checkpoint_path)
-            return sess.run([self.steering_probs, self.expected_bin], feed_dict={self.x:images, self.training: False})
-
-    def ExpectedBinToPWM(self, expected_bin, pwm_min_max=(-0.5, 0.5)):
-        pwm_range = abs(pwm_min_max[1] - pwm_min_max[0])
-        # between 0 and 1
-        norm = expected_bin / self.num_bins
-        # between -0.5 and 0.5
-        zero_cent = norm - 0.5
-        return zero_cent * pwm_range
-
-    def ExpectedBinToDeg(self, expected_bin, steering_range_deg=40):
-        # between 0 and 1
-        norm = expected_bin / self.num_bins
-        # between -0.5 and 0.5
-        zero_cent = norm - 0.5
-        return zero_cent * steering_range_deg
-
-    def GetGraph(self):
-        return tf.get_default_graph().as_graph_def()
-
-    def VideoDrive(self, checkpoint_path, video_path,
+    def video_drive(self, checkpoint_path, video_path,
                    car_ip, pwm_min_max=(-0.5, 0.5), port=5555, steering_range_deg=40):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((car_ip, port))
@@ -233,9 +202,9 @@ class Model:
                     y_scale     = 120. / 320.
                     img = cv2.resize(image, None, fx=x_scale, fy=y_scale)
                     img = np.expand_dims(img, axis=0)
-                    expected_bin = sess.run(self.expected_bin,
+                    steering_prediction = sess.run(self.steering_prediction,
                                     feed_dict={self.x:img, self.training: False})
-                    pwm = self.ExpectedBinToPWM(expected_bin[0],pwm_min_max)
+                    pwm = self.ExpectedBinToPWM(steering_prediction[0],pwm_min_max)
                     pwm = str(pwm)
                     print("pwm: {}".format(pwm))
                     s.sendall(str.encode(pwm))
@@ -244,3 +213,14 @@ class Model:
             except KeyboardInterrupt:
                     s.close()
                     print("Closed, by user")
+
+# Static methods
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+def prepare_data(generator):
+    batch    = generator.get_next_batch()
+    images   = batch["images"]
+    steering = [ele["steering"] for ele in batch["annotations"]]
+    throttle = [ele["throttle"] for ele in batch["annotations"]]
+    return images, steering, throttle
+

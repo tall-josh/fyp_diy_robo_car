@@ -37,5 +37,5 @@ class ThrottleModule(RegressorModule):
   def prepare_data(self, generator):
     batch    = generator.get_next_batch()
     images   = batch["images"]
-    steering = [ele["throttle"] for ele in batch["annotations"]]
-    return images, steering
+    throttle = [ele["throttle"] for ele in batch["annotations"]]
+    return images, throttle
