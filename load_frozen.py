@@ -2,9 +2,21 @@
 # https://blog.metaflow.fr/tensorflow-how-to-freeze-a-model-and-serve-it-with-a-python-api-d4f3596b3adc
 import tensorflow as tf
 import os
-import sys
-sys.path.append("..")
-from generators import VaeDataGenerator as DataGenerator
+
+from generator import DataGenerator as gen
+
+# For training (WILL bin steering annos, and WILL normalize throttle)
+# Images are normalized
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+from generator import preprocess_normalize_images_bin_annos as process_fn
+from generator import prepare_batch_images_and_labels_RAND_MIRROR as prep_batch
+
+# For evaluation (will NOT bin steering annos, and will leave throttle 0-1024)
+# Images are normalized
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#from generator import preprocess_normalize_images_only as process_fn
+#from generator import prepare_batch_images_and_labels_NO_MIRROR as prep_batch
+
 from utils import *
 import numpy as np
 
@@ -33,7 +45,9 @@ if __name__ == "__main__":
                   data_set=test[:100],
                   image_dir=image_dir,
                   anno_dir=anno_dir,
-                  num_bins=NUM_BINS)
+                  preprocess_fn=process_fn,
+                  prepare_batch_fn=prep_batch)
+
   test_gen.reset(shuffle=False)
 
   graph = load_graph(frozen_path, prefix="vae")
