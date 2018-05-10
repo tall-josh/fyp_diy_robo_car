@@ -10,8 +10,13 @@ import os
 #from show_graph import show_graph
 import json
 from metrics import Metrics
-from utils import save_images
 from freeze_graph import freeze_meta, write_tensor_dict_to_json, load_tensor_names
+import sys
+sys.path.append('..')
+from utils import save_images
+
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+GPU_OPTIONS = tf.GPUOptions(per_process_gpu_memory_fraction=2/11)
 
 INPUTS              = "inputs"
 OUTPUTS             = "outputs"
@@ -207,9 +212,10 @@ class Model:
         merge = tf.summary.merge_all()
 
         best_ckpt = ""
-        with tf.Session() as sess:
+        with tf.Session(config=tf.ConfigProto(gpu_options=GPU_OPTIONS)) as sess:
             # Tensorboard
-            train_writer = tf.summary.FileWriter(logs_path, sess.graph)
+            train_writer = tf.summary.FileWriter(logs_path+"/train_log", sess.graph)
+            test_writer  = tf.summary.FileWriter(logs_path+"/test_log", sess.graph)
 
             # Init
             sess.run(self.init_vars)
@@ -226,8 +232,10 @@ class Model:
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 sess.run(self.set_training, feed_dict={self._training: True})
                 train_gen.reset()
-                t_train = trange(train_gen.steps_per_epoch)
-                t_train.set_description(f"Training Epoch: {e+1}")
+                #t_train = trange(train_gen.steps_per_epoch)
+                #t_train.set_description(f"Training Epoch: {e+1}")
+                t_train = range(train_gen.steps_per_epoch)
+                print(f"Training epoch: {e+1}")
                 for step in t_train:
                     _beta = self.anneal_beta(global_step, annealing_epochs,
                                             train_gen.steps_per_epoch, beta_max)
@@ -239,15 +247,16 @@ class Model:
                                           self.y: ims})
                     train_writer.add_summary(summary, global_step)
                     global_step += 1
-                    print(f"beta: {b}")
 
                 # Begin Testing
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 sess.run(self.set_training, feed_dict={self._training: False})
                 embeddings      = []
                 test_gen.reset(shuffle=False)
-                t_test = trange(test_gen.steps_per_epoch)
-                t_test.set_description('Testing')
+                #t_test = trange(test_gen.steps_per_epoch)
+                #t_test.set_description('Testing')
+                t_test = range(test_gen.steps_per_epoch)
+                print(f"Testing epoch: {e+1}")
                 loss = []
                 for _ in t_test:
                     ims, _, _ = prepare_data(test_gen)
@@ -255,7 +264,10 @@ class Model:
                                feed_dict={self.x: ims,
                                           self.y: ims})
                     embeddings.extend(zeds)
+                    test_writer.add_summary(summary, global_step)
                     loss.append(_loss)
+                    global_step += 1
+
                 # House keeping
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -1,9 +1,15 @@
 from vae import Model
 import os
 from utils import *
-from generator import DataGenerator, preprocess_normalize_images_bin_annos
-from generator import prepare_batch_images_and_labels
 import json
+from freeze_graph import freeze_meta
+from generator import DataGenerator
+
+# For training (WILL bin steering annos, and WILL normalize throttle)           
+# Images are normalized                                                         
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+from generator import preprocess_normalize_images_bin_annos as process_fn       
+from generator import prepare_batch_images_and_labels_RAND_MIRROR as prep_batch 
 
 '''
 Exaple bash command:
@@ -23,7 +29,7 @@ def save_config(save_dir, data_dir, train_txt, test_txt, lr, batch_size,
     payload["epochs"]      = epochs
     payload["in_shape"]    = in_shape
     payload["best_ckpt"]   = best_ckpt
-    payload["best_loss"]   = float(best_loss)
+    payload["best_loss"]   = best_loss
     payload["annealing"]   = annealing_epochs
     payload["beta"]        = beta
     payload["message"]     = message
@@ -74,26 +80,26 @@ def main():
 
     # Create train and test generators
     train_gen   = DataGenerator(batch_size=batch_size,
-                      data_set=raw_train[:200],
+                      data_set=raw_train,
                       image_dir=image_dir,
                       anno_dir=anno_dir,
-                      preprocess_fn=preprocess_normalize_images_bin_annos,
-                      prepare_batch_fn=prepare_batch_images_and_labels)
+                      preprocess_fn=process_fn,
+                      prepare_batch_fn=prep_batch)
 
     test_gen    = DataGenerator(batch_size=batch_size,
-                      data_set=raw_test[:50],
+                      data_set=raw_test,
                       image_dir=image_dir,
                       anno_dir=anno_dir,
-                      preprocess_fn=preprocess_normalize_images_bin_annos,
-                      prepare_batch_fn=prepare_batch_images_and_labels)
+                      preprocess_fn=process_fn,
+                      prepare_batch_fn=prep_batch)
 
     sample_gen  = DataGenerator(batch_size=10,
                       data_set=raw_test[:10],
                       image_dir=image_dir,
                       anno_dir=anno_dir,
-                      preprocess_fn=preprocess_normalize_images_bin_annos,
-                      prepare_batch_fn=prepare_batch_images_and_labels,
-                      shuffle=False)
+                      preprocess_fn=process_fn,
+                      prepare_batch_fn=prep_batch)
+    sample_gen.reset(shuffle=False)
 
     # Save the config to a file
     epochs      = args.epochs
@@ -115,14 +121,22 @@ def main():
 
     # Kick-off
     vae         = Model(in_shape)
-    ckpt_loss   = vae.train(train_gen, test_gen, save_dir,
-                            epochs=epochs, lr=lr, sample_inf_gen=sample_gen,
+    return_info = vae.train(train_gen, test_gen, save_dir,
+                            epochs=epochs, sample_inf_gen=sample_gen,
                             annealing_epochs=annealing_epochs, beta_max=beta)
-    best_ckpt = ckpt_loss["best_ckpt"]
-    best_loss = ckpt_loss["best_loss"]
+    
+    frozen_meta = freeze_meta(return_info["graph_path"],
+                                    return_info["ckpt_path"],
+                                    return_info["out_path"]+"/frozen.pb",
+                                    return_info["tensor_json"])
+    return_info["frozen_meta"] = frozen_meta
+    
+    best_ckpt = return_info["final_loss"]
+    best_loss = return_info["ckpt_path"]
     save_config(save_dir, data_dir, train_path, test_path, lr, batch_size,
                 epochs, in_shape, best_ckpt, best_loss, beta, annealing_epochs,
                 message)
+    json.dump(return_info, open(save_dir+"/return_info.json", 'w'))
 
 if __name__ == "__main__":
     main()

@@ -20,6 +20,8 @@ import json
 from metrics import Metrics
 from freeze_graph import freeze_meta, write_tensor_dict_to_json, load_tensor_names
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+GPU_OPTIONS = tf.GPUOptions(per_process_gpu_memory_fraction=2/11)
 
 INPUTS              = "inputs"
 OUTPUTS             = "outputs"
@@ -117,7 +119,7 @@ class Model:
                         "tensor_json"  : ""}
         first_save=True
         best_ckpt = ""
-        with tf.Session() as sess:
+        with tf.Session(config=tf.ConfigProto(gpu_options=GPU_OPTIONS)) as sess:
             merge = tf.summary.merge_all()
             train_writer = tf.summary.FileWriter(save_dir+"/logdir/train", sess.graph)
             test_writer  = tf.summary.FileWriter(save_dir+"/logdir/test")
@@ -132,8 +134,10 @@ class Model:
             for e in range(epochs):
                 sess.run(self.set_training, feed_dict={self._training: True})
                 train_gen.reset()
-                t_train = trange(train_gen.steps_per_epoch)
-                t_train.set_description(f"Training Epoch: {e+1}")
+                #t_train = trange(train_gen.steps_per_epoch)
+                #t_train.set_description(f"Training Epoch: {e+1}")
+                t_train = range(train_gen.steps_per_epoch)
+                print(f"Training Epoch: {e+1}")
                 for step in t_train:
                     images, steering, throttle = prepare_data(train_gen)
                     _, summary = sess.run([self.train_step, merge],
@@ -146,8 +150,8 @@ class Model:
 
                 sess.run(self.set_training, feed_dict={self._training: False})
                 test_gen.reset()
-                t_test = trange(test_gen.steps_per_epoch)
-                t_test.set_description('Testing')
+                t_test = range(test_gen.steps_per_epoch)
+                print('Testing')
                 test_loss = []
                 for _ in t_test:
                     images, steering, throttle = prepare_data(test_gen)
