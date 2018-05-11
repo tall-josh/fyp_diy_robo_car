@@ -16,7 +16,7 @@ sys.path.append('..')
 from utils import save_images
 
 #os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-GPU_OPTIONS = tf.GPUOptions(per_process_gpu_memory_fraction=2/11)
+GPU_OPTIONS = tf.GPUOptions(per_process_gpu_memory_fraction=5/11)
 
 INPUTS              = "inputs"
 OUTPUTS             = "outputs"
@@ -77,39 +77,31 @@ class Model:
         sigmoid = tf.nn.sigmoid
         with tf.name_scope("encoder"):
             # Padding invector so reconstruction returns to the correct size.
-            x_padded = tf.pad(self.x, paddings, "SYMMETRIC")
+            #x_padded = tf.pad(self.x, paddings, "SYMMETRIC")
             # Encoder            in     num   shape  stride   pad
-            enc1  = conv2d(x_padded,  24,  (5,5), (2,2),  "same",
-                           activation=relu, kernel_initializer=xavier(),
-                           name="enc1")# 64, 80,24
-            enc2  = conv2d(enc1, 32,  (5,5), (2,2),  "same",
-                           activation=relu, kernel_initializer=xavier(),
-                           name="enc2")# 32, 40,32
-            enc3  = conv2d(enc2, 64,  (5,5), (2,2),  "same",
-                           activation=relu, kernel_initializer=xavier(),
-                           name="enc3")# 16, 20,64
-            enc4  = conv2d(enc3, 64,  (3,3), (2,2),  "same",
-                           activation=relu, kernel_initializer=xavier(),
-                           name="enc4")#  8, 10,64
-            enc5  = conv2d(enc4, 64,  (3,3), (1,1),  "same",
-                           activation=relu, kernel_initializer=xavier(),
-                           name="enc5")#  8, 10,64
-            enc5f = flatten(enc5)
-            #                     in   num
-            enc6  = dense(enc5f, 100,
-                          activation=relu, kernel_initializer=xavier(),
-                          name="enc6")
-            enc6d = dropout(enc6, rate=0.1, training=self.training, name="enc6d")
+            enc  = conv2d(self.x,  32,  (5,5), (2,2),  "valid",
+                           activation=relu, kernel_initializer=xavier())# 59x79
+            print(f"enc1: {np.shape(enc)}")
+            enc  = conv2d(enc, 62,  (5,5), (2,2),  "valid",
+                           activation=relu, kernel_initializer=xavier())# 28x38
+            print(f"enc2: {np.shape(enc)}")
+            enc  = conv2d(enc, 128,  (4,4), (2,2),  "valid",
+                           activation=relu, kernel_initializer=xavier())# 13x18
+            print(f"enc3: {np.shape(enc)}")
+            enc  = conv2d(enc, 256,  (4,4), (2,2),  "valid",
+                           activation=relu, kernel_initializer=xavier())# 5x8
+            print(f"enc4: {np.shape(enc)}")
+            enc = flatten(enc)
 
         with tf.name_scope("sampling"):
             # VAE sampling
             '''
             Note: exp(log(log_sigma / 2)) = sigma
             '''
-            self.mu           = dense(enc6d, self.embedding_dim, activation=None,
+            self.mu           = dense(enc, self.embedding_dim, activation=None,
                                       kernel_initializer=xavier(),
                                       name="mu")
-            self.log_sigma = dense(enc6d, self.embedding_dim, activation=None,
+            self.log_sigma = dense(enc, self.embedding_dim, activation=None,
                                       kernel_initializer=xavier(),
                                       name="log_sigma")
             eps          = tf.random_normal(shape=tf.shape(self.mu),
@@ -118,37 +110,43 @@ class Model:
             self.noisy_sigma  = tf.exp(self.log_sigma) * eps
             self.z       = tf.add(self.mu, self.noisy_sigma, name="z")
 
-            tf.summary.histogram("z", self.z)
-            tf.summary.histogram("log_sigma", self.log_sigma)
-            tf.summary.histogram("mu", self.mu)
-            tf.summary.histogram("eps", eps)
+            #tf.summary.histogram("z", self.z)
+            #tf.summary.histogram("log_sigma", self.log_sigma)
+            #tf.summary.histogram("mu", self.mu)
+            #tf.summary.histogram("eps", eps)
 
         with tf.name_scope("decoder"):
             # Decoder    in          num
-            dec1 = dense(self.z, 100, activation=relu,
-                             kernel_initializer=xavier(), name="dec1")
-            dec2 = dense(dec1, (8*10*64), activation=relu,
-                             kernel_initializer=xavier(), name="dec2")
-            dec2r  = tf.reshape(dec2, (-1,8,10,64))
+            dec = dense(self.z, (256*5*7), activation=relu,
+                             kernel_initializer=xavier())
+            print(f"dec4: {np.shape(dec)}")
+            dec  = tf.reshape(dec, (-1,5,7,256))
+            print(f"dec3: {np.shape(dec)}")
             #                        in num  shape  stride   pad
-            dec3  = conv2d_transpose(dec2r, 64, (3,3), (1,1), "same",
-                                         activation=relu, name="dec3")
-            dec4  = conv2d_transpose(dec3, 64, (3,3), (2,2), "same",
-                                         activation=relu, name="dec4")
-            dec5  = conv2d_transpose(dec4, 32, (5,5), (2,2), "same",
-                                         activation=relu, name="dec5")
-            dec6  = conv2d_transpose(dec5, 24, (5,5), (2,2), "same",
-                                         activation=relu, name="dec6")
-
-            dec7  = conv2d_transpose(dec6, 3,  (5,5), (2,2), "same",
-                                         activation=None, name="dec8")
-            self.dec  = relu(dec7, name="reconstruction")
+            dec  = conv2d_transpose(dec, 128, (4,4), (2,2), "valid", activation=relu)
+            print(f"dec2: {np.shape(dec)}")
+            dec  = conv2d_transpose(dec,  64, (4,4), (2,2), "valid", activation=relu)
+            print(f"dec1: {np.shape(dec)}")
+            dec  = conv2d_transpose(dec,  32, (6,6), (2,2), "valid", activation=relu)
+            print(f"dec0: {np.shape(dec)}")
+            self.dec  = conv2d_transpose(dec, 3,  (10,18), (2,2), "valid",
+                                         activation=sigmoid, name="reconstruction")
+            print(f"out: {np.shape(self.dec)}")
+#            self.dec  = relu(dec7, name="reconstruction")
 
         with tf.name_scope("loss"):
             # # VAE Loss
             # 1. Reconstruction loss: How far did we get from the actual image?
-            y_padded = tf.pad(self.y, paddings, "SYMMETRIC")
-            self.rec_loss = tf.reduce_sum(tf.square(y_padded - self.dec), axis=[1,2,3])
+            #y_padded = tf.pad(self.y, paddings, "SYMMETRIC")
+            self.rec_loss = tf.reduce_sum(tf.square(self.y - self.dec), axis=[1,2,3])
+# Cross entropy loss from:                                          
+            # https://stats.stackexchange.com/questions/332179/                 
+            #         how-to-weight-kld-loss-vs-reconstruction-                 
+            #         loss-in-variational-auto-encod                            
+            # Must have self.dec activation as sigmoid                          
+#            clipped = tf.clip_by_value(self.dec, 1e-8, 1-1e-8)                  
+#            self.rec_loss = -tf.reduce_sum(self.y * tf.log(clipped)           
+#                                      + (1-self.y) * tf.log(1-clipped), axis=[1,2,3])
 
             # 2. KL-Divergence: How far from the distribution 'z' is sampled
             #                   from the desired zero mean unit variance?
@@ -206,7 +204,8 @@ class Model:
                         "ckpt_path"    : "",
                         "out_path"     : save_dir,
                         "tensor_json"  : ""}
-        logs_path = self.setup_meta(save_dir, test_gen)
+        #logs_path = self.setup_meta(save_dir, test_gen)
+        logs_path = os.path.join(save_dir, "train_logs")
 
         # Tensorboard
         merge = tf.summary.merge_all()
@@ -215,7 +214,7 @@ class Model:
         with tf.Session(config=tf.ConfigProto(gpu_options=GPU_OPTIONS)) as sess:
             # Tensorboard
             train_writer = tf.summary.FileWriter(logs_path+"/train_log", sess.graph)
-            test_writer  = tf.summary.FileWriter(logs_path+"/test_log", sess.graph)
+            test_writer  = tf.summary.FileWriter(logs_path+"/test_log")
 
             # Init
             sess.run(self.init_vars)
@@ -232,55 +231,54 @@ class Model:
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 sess.run(self.set_training, feed_dict={self._training: True})
                 train_gen.reset()
-                #t_train = trange(train_gen.steps_per_epoch)
-                #t_train.set_description(f"Training Epoch: {e+1}")
-                t_train = range(train_gen.steps_per_epoch)
+                t_train = trange(train_gen.steps_per_epoch)
+                #t_train = range(train_gen.steps_per_epoch)
                 print(f"Training epoch: {e+1}")
                 for step in t_train:
                     _beta = self.anneal_beta(global_step, annealing_epochs,
                                             train_gen.steps_per_epoch, beta_max)
                     sess.run(self.update_beta, feed_dict={self._beta: _beta})
-                    ims, _, _ = prepare_data(train_gen)
+                    ims, nims, _, _ = prepare_data(train_gen)
                     summary, _, loss, b = sess.run([merge, self.train_step,
                                                  self.loss, self.beta],
-                               feed_dict={self.x: ims,
+                               feed_dict={self.x: nims,
                                           self.y: ims})
                     train_writer.add_summary(summary, global_step)
+                    t_train.set_description(f"{np.mean(loss):.3f}")
                     global_step += 1
 
                 # Begin Testing
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 sess.run(self.set_training, feed_dict={self._training: False})
                 embeddings      = []
-                test_gen.reset(shuffle=False)
+                test_gen.reset(shuffle=True)
                 #t_test = trange(test_gen.steps_per_epoch)
                 #t_test.set_description('Testing')
-                t_test = range(test_gen.steps_per_epoch)
-                print(f"Testing epoch: {e+1}")
-                loss = []
-                for _ in t_test:
-                    ims, _, _ = prepare_data(test_gen)
-                    _loss, zeds = sess.run([self.loss, self.z],
-                               feed_dict={self.x: ims,
-                                          self.y: ims})
-                    embeddings.extend(zeds)
-                    test_writer.add_summary(summary, global_step)
-                    loss.append(_loss)
-                    global_step += 1
+                #t_test = range(test_gen.steps_per_epoch)
+                #loss = []
+                #for _ in t_test:
+                ims, nims, _, _ = prepare_data(test_gen)
+                summary, loss, zeds = sess.run([merge, self.loss, self.z],
+                           feed_dict={self.x: nims,
+                                      self.y: ims})
+                #embeddings.extend(zeds)
+                test_writer.add_summary(summary, global_step)
+                print(f"Testing loss: {np.mean(loss):.3f}")
+                #loss.append(_loss)
 
                 # House keeping
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
                 # Update embedding being plotted by tensorboard
-                sess.run(self.update_embeddings,
-                         feed_dict={self._embeddings:
-                                    embeddings[:self.num_projections]})
+                #sess.run(self.update_embeddings,
+                #         feed_dict={self._embeddings:
+                #                    embeddings[:self.num_projections]})
 
                 # Only begin saving checkpoints after beta is fully annealed
-                if e+1 >= annealing_epochs:
+                if e >= annealing_epochs:
                     # only need to save graph once, then save the weights
                     # at each improving epoch
-                    if e+1 == annealing_epochs:
+                    if e == annealing_epochs:
                         path = os.path.join(save_dir, "graph.meta")
                         self.saver.export_meta_graph(path)
                         return_info["graph_path"] = os.path.abspath(path)
@@ -318,12 +316,13 @@ class Model:
     def save_sample_inference(self, sess, sample_inf_gen, save_dir):
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-
-        batch = sample_inf_gen.get_next_batch()
         sample_inf_gen.reset(shuffle=False)
-        reconstructions = sess.run(self.dec,
-                                   feed_dict={self.x: batch["images"]})
+        batch    = sample_inf_gen.get_next_batch()
         names = batch["names"]
+        nims = batch["noisy_images"] if "noisy_images" in batch else batch["images"]
+        reconstructions = sess.run(self.dec,
+                                   feed_dict={self.x: nims})
+         
         save_images(reconstructions, names, save_dir)
 
 # Static methods        
@@ -333,11 +332,15 @@ def prepare_data(generator):
     batch    = generator.get_next_batch()
     # ToDo:
     # Add some noice to images maybe???
-    
     images   = batch["images"]
     steering = [ele["steering"] for ele in batch["annotations"]]
     throttle = [ele["throttle"] for ele in batch["annotations"]]
-    return images, steering, throttle
+    noisy_images = None
+    if "noisy_images" in batch:
+        noisy_images = batch["noisy_images"]
+    else:
+        noisy_images = images
+    return images, noisy_images, steering, throttle
 
 # def forward_pass(graph, input_tensor_name, output_tensor_names, vector_batch):
 #     with tf.Session(graph=graph) as sess:

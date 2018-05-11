@@ -1,4 +1,4 @@
-from concrete_modules import ThrottleModule as Module
+from concrete_modules import SteeringModule as Module
 import tensorflow as tf
 from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer as xavier
 import os
@@ -83,15 +83,15 @@ def main():
     # Create train and test generators
     batch_size  = args.batch_size
     
-    train_gen=gen(batch_size=10, 
-              data_set=raw_train[:100],
+    train_gen=gen(batch_size=50, 
+              data_set=raw_train,
               image_dir=image_dir,
               anno_dir=anno_dir,
               preprocess_fn=process_fn,
               prepare_batch_fn=prep_batch)
 
-    test_gen=gen(batch_size=10, 
-                 data_set=raw_test[:50],
+    test_gen=gen(batch_size=300, 
+                 data_set=raw_test,
                  image_dir=image_dir,
                  anno_dir=anno_dir,
                  preprocess_fn=process_fn,

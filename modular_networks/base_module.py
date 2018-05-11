@@ -17,6 +17,7 @@ PREDICTION          = "prediction"
 tensor_dict = {INPUTS  : {IMAGE_INPUT : ""},
                OUTPUTS : {PREDICTION  : ""}}
 
+GPU_OPTIONS = tf.GPUOptions(per_process_gpu_memory_fraction=2/11)
 
 def update_tensor_dict(input_or_output, key, tensor):
   tensor_dict[input_or_output][key] = tensor.name
@@ -68,20 +69,15 @@ class BaseModule(object):
                                            initializer=True,
                                            trainable=False)
       self.set_training = self.training.assign(self._training)
+      lay1 = dense(self.z, 40, activation=tf.nn.relu, kernel_initializer=xavier())
+      lay1 = dropout(lay1, rate=0.5)
+      lay1 = dense(lay1, 30, activation=tf.nn.relu, kernel_initializer=xavier())
+      lay1 = dropout(lay1, rate=0.5)
+      lay1 = dense(lay1, 20, activation=tf.nn.relu, kernel_initializer=xavier())
+      lay1 = dropout(lay1, rate=0.5)
+      lay1 = dense(lay1, 15, activation=None, kernel_initializer=xavier())
 
-      # Setup metwork that will take [n,50] embedding vectors.
-      _ = self.z
-      for layer in layer_def:
-        _ = dense(_,
-                  units              = layer["neurons"],
-                  activation         = layer["activation"],
-                  kernel_initializer = layer["init"],
-                  name               = layer["name"])
-        drop = layer["dropout"]
-        if drop!= 1.:
-          _ = dropout(_, rate=drop, training=self.training)
-
-      self.logits   = _
+      self.logits   = lay1
       self.prediction = self.make_prediction()
 
       self.loss     = self.loss_fn()
@@ -104,7 +100,7 @@ class BaseModule(object):
                    "ckpt_path"    : "",
                    "out_path"     : save_dir,
                    "tensor_json"  : ""}
-    with tf.Session(graph=self.graph) as sess:
+    with tf.Session(graph=self.graph, config=tf.ConfigProto(gpu_options=GPU_OPTIONS)) as sess:
       # Tensorboard
       merge = tf.summary.merge_all()
 
@@ -138,41 +134,39 @@ class BaseModule(object):
           # Tensorboard
           train_writer.add_summary(summary, global_step)
           global_step += 1
+          t_train.set_description(f"{np.mean(loss):.3f}")
+          # Begin Testing
+          # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          if global_step%50 == 0:
+            print(f"Testing Epoch: {e+1}")
+            sess.run(self.set_training, feed_dict={self._training: False})
+            test_gen.reset()
+            _x, _y = self.prepare_data(test_gen)
 
-        # Begin Testing
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        sess.run(self.set_training, feed_dict={self._training: False})
-        test_gen.reset()
-        t_test = trange(test_gen.steps_per_epoch)
-        t_test.set_description(f"Testing Epoch: {e+1}")
-        loss = []
-        for step in t_test:
-          _x, _y = self.prepare_data(test_gen)
+            loss, summary = sess.run([self.loss, merge],
+                                   feed_dict={self.x: _x,
+                                              self.y: _y})
+            cur_loss = np.mean(loss)
+            print(f"Test Loss: {cur_loss:.3f}")
+            if cur_loss < best_loss:
+              best_loss = cur_loss
+              path = f"{save_dir}/ep_{e+1}.ckpt"
+              best_ckpt = self.saver.save(sess, path, write_meta_graph=False)
+              return_info["ckpt_path"]=os.path.abspath(best_ckpt)
+              print("Model saved at {}".format(best_ckpt))
 
-          _loss, summary = sess.run([self.loss, merge],
-                                 feed_dict={self.x: _x,
-                                            self.y: _y})
-          loss.append(_loss)
-          cur_loss = np.mean(loss)
-          if cur_loss < best_loss:
-            best_loss = cur_loss
-            path = f"{save_dir}/ep_{e+1}.ckpt"
-            best_ckpt = self.saver.save(sess, path, write_meta_graph=False)
-            return_info["ckpt_path"]=os.path.abspath(best_ckpt)
-            print("Model saved at {}".format(best_ckpt))
+              if first_save:
+                path = os.path.join(save_dir, "graph.meta")
+                self.saver.export_meta_graph(path)
+                return_info["graph_path"] = os.path.abspath(path)
 
-            if first_save:
-              path = os.path.join(save_dir, "graph.meta")
-              self.saver.export_meta_graph(path)
-              return_info["graph_path"] = os.path.abspath(path)
+                path = write_tensor_dict_to_json(save_dir, tensor_dict)
+                return_info["tensor_json"] = os.path.abspath(path)
+                first_save=False
 
-              path = write_tensor_dict_to_json(save_dir, tensor_dict)
-              return_info["tensor_json"] = os.path.abspath(path)
-              first_save=False
+              # Tensorboard
+              test_writer.add_summary(summary, global_step)
 
-          # Tensorboard
-          test_writer.add_summary(summary, global_step)
-          global_step += 1
       print(f"Done, final best loss: {best_loss:0.3f}")
       return_info["final_loss"] = float(best_loss)
       json.dump(return_info, open(save_dir+"/return_info.json", 'w'))

@@ -6,6 +6,12 @@ import json
 
 INPUTS              = "inputs"
 OUTPUTS             = "outputs"
+IMAGE_INPUT         = "image_input"
+EMBEDDING           = "embedding"
+RECONSTRUCTION      = "reconstruction"
+tensor_dict = {INPUTS  : {IMAGE_INPUT    : ""},
+               OUTPUTS : {EMBEDDING      : "",
+                          RECONSTRUCTION : ""}}
 '''
 To use this module you'll need to define a dict with a the structure shown below.
 
@@ -114,18 +120,12 @@ if __name__ == "__main__":
   parser.add_argument('--ckpt-path',  type=str, required=True)
   parser.add_argument('--graph-path', type=str, required=True)
   parser.add_argument('--out-path',   type=str, required=True)
-  parser.add_argument('--outputs',    type=str, required=False, nargs="+",
-                      help="name of output tensors")
   parser.add_argument('--tensor-json',    type=str, required=False,
                       help="json with tensor names")
   args = parser.parse_args()
   graph_path   = args.graph_path
   ckpt_path    = args.ckpt_path
   out_path     = args.out_path
-  output_names = args.outputs
-
-  if args.tensor_json is not None:
-    tensor_names = load_tensor_names(args.tenson_json)
-    output_names = [n.split(":")[0] for n in tensor_names[OUTPUT_NAMES]]
-
-  freeze_graph(graph_path, ckpt_path, out_path, output_names)
+  tensor_json  = args.tensor_json
+  path = freeze_meta(graph_path, ckpt_path, out_path, tensor_json)
+  print(f"frozen model saved at {path}")
