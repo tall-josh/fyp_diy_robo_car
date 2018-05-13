@@ -2,13 +2,13 @@
 
 The graphical information represented below displays current testing values of four different Convolutional Neural Networks as listed:
 - Autoencoder
- - Standard encoder/decoder setup with no probability distribution
+  - Standard encoder/decoder setup with no probability distribution
 - VAE
 - b(5)_VAE
- - Variational Autoencoder with a beta value of 5
+  - Variational Autoencoder with a beta value of 5
 - Donkey Car
- - NN architecture taken from the Donkey Car project for comparison purposes
- - https://github.com/wroscoe/donkey
+  - NN architecture taken from the Donkey Car project for comparison purposes
+  - https://github.com/wroscoe/donkey
 
 ---
 
