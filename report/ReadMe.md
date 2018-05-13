@@ -1,20 +1,21 @@
 # Neural Network (NN) Graphical Represenations
 
+
 The graphical information represented below displays current testing values of four different Convolutional Neural Networks as listed:
 - Autoencoder
-  - Standard encoder/decoder setup with no probability distribution
+  - Standard encoder/decoder setup.
 - VAE
   - Variational Autoencoder
-- b(5)_VAE
-  - Variational Autoencoder with a beta value of 5
+- $\beta$-VAE
+  - Variational Autoencoder with a $\beta=5$
 - Donkey Car
   - NN architecture taken from the Donkey Car project for comparison purposes
-  - https://github.com/wroscoe/donkey
+  - A TensorFlow implementation of the network from https://github.com/wroscoe/donkey
 
 ---
 
 ## Correlations
-- Plots display steering angle (x-axis) against individual element value (y-axis), while holding everything else constant:
+- Plots display ground truth steering command (x-axis) against the value of each individual element of the embedding vector (y-axis) for each image in the test set. The aim was to visualize any corrilation between steering command and 1 or more elements of the embedding vector. However, none are apparent:
 #### Autoencoder
 ![Autoencoder Correlations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/autoencoder/correlations.png)
 #### VAE
@@ -23,25 +24,24 @@ The graphical information represented below displays current testing values of f
 ![b5-VAE Correlations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/correlations.png)
 
 ## Side-by-side
-- Images represent input image with introduced static or noise (top) and reconstructed image (bottom):
+- Noisy input image to the networks (top). Reconstructed image (bottom):
 #### Autoencoder
 ![Autoencoder Side-by-side](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/autoencoder/side_by_side.jpg)
 #### VAE
 ![VAE Side-by-side](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/side_by_side.jpg)
 #### b(5)-VAE
-![b5-VAE Side-by-side](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/side_by_side.jpg)
+![b5-VAE Side-by-side](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/beta_5_vae/side_by_side.jpg)
 
 ## Visualizations
-- Central column is static, while embedding vector is varied between (-6, 6):
+- Taking the average embedding across the entire test set as a starting point (center column). Each element of the 50 element embedding vector is swepped +- 6 from the mean with a step of 1, while holding all other element constan.:
 #### Autoencoder
 ![Autoencoder Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/autoencoder/visualizations.png)
 #### VAE
-![VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/visualizations.png)
+![VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/beta_5_vae/visualizations.png)
 #### b(5)-VAE
 ![b5-VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/visualizations.png)
 
 ---
-
 
 ## Steering Scatter Plot
 - Plots display the correlation between expected steering position (annotations) and positions predicted by the Neural Net:
