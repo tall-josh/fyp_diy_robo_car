@@ -1,5 +1,5 @@
 # Neural Network (NN) Graphical Represenations
-
+<a href="https://www.codecogs.com/eqnedit.php?latex=\beta" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\beta" title="\beta" /></a>
 
 The graphical information represented below displays current testing values of four different Convolutional Neural Networks as listed:
 - Autoencoder
@@ -20,7 +20,7 @@ The graphical information represented below displays current testing values of f
 ![Autoencoder Correlations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/autoencoder/correlations.png)
 #### VAE
 ![VAE Correlation](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/correlations.png)
-#### $$/beta(5)$$-VAE
+#### $$\beta(5)$$-VAE
 ![b5-VAE Correlations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/correlations.png)
 
 ## Side-by-side
@@ -29,7 +29,7 @@ The graphical information represented below displays current testing values of f
 ![Autoencoder Side-by-side](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/autoencoder/side_by_side.jpg)
 #### VAE
 ![VAE Side-by-side](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/side_by_side.jpg)
-#### $$/beta(5)$$-VAE
+#### $$\beta(5)$$-VAE
 ![b5-VAE Side-by-side](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/beta_5_vae/side_by_side.jpg)
 
 ## Visualizations
@@ -38,7 +38,7 @@ The graphical information represented below displays current testing values of f
 ![Autoencoder Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/autoencoder/visualizations.png)
 #### VAE
 ![VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/beta_5_vae/visualizations.png)
-#### $$/beta(5)$$-VAE
+#### $$\beta(5)$$-VAE
 ![b5-VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/visualizations.png)
 
 ---
@@ -51,7 +51,7 @@ The graphical information represented below displays current testing values of f
 ![Autoencoder Steering Scatter](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/autoencoder/Steering_scatter.png)
 #### VAE
 ![VAE Steering Scatter](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/vae/Steering_scatter.png)
-#### $$/beta(5)$$-VAE
+#### $$\beta(5)$$-VAE
 ![b5-VAE Steering Scatter](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/beta_5_vae/Steering_scatter.png)
 
 ## Steering v Time
@@ -63,7 +63,7 @@ The graphical information represented below displays current testing values of f
 ![Autoencoder Steering v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/autoencoder/Steering_v_time.png)
 #### VAE
 ![VAE Steering v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/vae/Steering_v_time.png)
-#### $$/beta(5)$$-VAE
+#### $$\beta(5)$$-VAE
 ![b5-VAE Steering v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/beta_5_vae/Steering_v_time.png)
 
 ## Throttle Scatter Plot
@@ -74,7 +74,7 @@ The graphical information represented below displays current testing values of f
 ![Autoencoder Throttle Scatter](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_throttle/autoencoder/Throttle_scatter.png)
 #### VAE
 ![VAE Throttle Scatter](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_throttle/vae/Throttle_scatter.png)
-#### $$/beta(5)$$-VAE
+#### $$\beta(5)$$-VAE
 ![b5-VAE Throttle Scatter](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_throttle/beta_5_vae/Throttle_scatter.png)
 
 ## Throttle v Time
@@ -86,5 +86,5 @@ The graphical information represented below displays current testing values of f
 ![Autoencoder Throttle v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_throttle/autoencoder/Throttle_v_time.png)
 #### VAE
 ![VAE Throttle v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_throttle/vae/Throttle_v_time.png)
-#### $$/beta(5)$$-VAE
+#### $$\beta(5)$$-VAE
 ![b5-VAE Throttle v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_throttle/beta_5_vae/Throttle_v_time.png)
