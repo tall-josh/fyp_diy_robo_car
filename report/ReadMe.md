@@ -4,6 +4,7 @@ The graphical information represented below displays current testing values of f
 - Autoencoder
   - Standard encoder/decoder setup with no probability distribution
 - VAE
+  - Variational Autoencoder
 - b(5)_VAE
   - Variational Autoencoder with a beta value of 5
 - Donkey Car
@@ -77,6 +78,8 @@ The graphical information represented below displays current testing values of f
 ![b5-VAE Throttle Scatter](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_throttle/beta_5_vae/Throttle_scatter.png)
 
 ## Throttle v Time
+- Graphs show throttle values over predicted values with respect to time:
+- Error indicates deviation by the predicted values from the ground truth:
 #### Donkey Car
 ![Donkey Car Throttle v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/donkey_car_tetsing/donkey_throttle_v_time.png)
 #### Autoencoder
