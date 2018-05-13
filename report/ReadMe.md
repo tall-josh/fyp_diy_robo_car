@@ -57,6 +57,7 @@
 ![b5-VAE Steering v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/beta_5_vae/Steering_v_time.png)
 
 ## Throttle Scatter Plot
+- Plots display the correlation between expected throttle value (annotations) and positions predicted by the Neural Net:
 #### Donkey Car
 ![Donkey Car Throttle Scatter](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/donkey_car_tetsing/donkey_throttle_scatter.png)
 #### Autoencoder
