@@ -44,7 +44,7 @@
 #### Donkey Car
 ![Donkey Car Steering v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/donkey_car_tetsing/donkey_steering_v_time.png)
 #### Autoencoder
-![Autoencoder Steering v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/autoencoder/Steering_v_time.png
+![Autoencoder Steering v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/autoencoder/Steering_v_time.png)
 #### VAE
 ![VAE Steering v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/vae/Steering_v_time.png)
 #### b(5)-VAE
