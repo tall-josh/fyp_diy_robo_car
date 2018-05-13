@@ -13,7 +13,7 @@
 ![b5-VAE Correlations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/correlations.png)
 
 ## Side-by-side
-- Images represent input image with introduced static or noise (top) and deconvolution image (bottom):
+- Images represent input image with introduced static or noise (top) and reconstructed image (bottom):
 #### Autoencoder
 ![Autoencoder Side-by-side](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/autoencoder/side_by_side.jpg)
 #### VAE
