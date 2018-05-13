@@ -34,6 +34,7 @@
 
 
 ## Steering Scatter Plot
+- Plots display the correlation between expected steering position (annotations) and positions predicted by the Neural Net:
 #### Donkey Car
 ![Donkey Car Steering Scatter](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/donkey_car_tetsing/donkey_steeing_scatter.png)
 #### Autoencoder
@@ -44,6 +45,8 @@
 ![b5-VAE Steering Scatter](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/modular_steering/beta_5_vae/Steering_scatter.png)
 
 ## Steering v Time
+- Graphs show overlaid steering positions (steering command); from full left to full right; as taken from the data set (Ground Truth) and the Neural Net (Predictions):
+- Error indicated deviation by the predicted values from the ground truth:
 #### Donkey Car
 ![Donkey Car Steering v Time](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/donkey_car_tetsing/donkey_steering_v_time.png)
 #### Autoencoder
