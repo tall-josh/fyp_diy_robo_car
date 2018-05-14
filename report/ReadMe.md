@@ -36,9 +36,9 @@ The graphical information represented below displays current testing values of f
 #### Autoencoder
 ![Autoencoder Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/autoencoder/auto_visualizations.png)
 #### VAE
-![VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/beta_5_vae/vae_visualizations.png)
+![VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/vae_visualizations.png)
 #### <a href="https://www.codecogs.com/eqnedit.php?latex=\beta" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\beta" title="\beta" /></a>-VAE
-![b5-VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/b5vae_visualizations.png)
+![b5-VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/beta_5_vae/b5vae_visualizations.png)
 
 ---
 
