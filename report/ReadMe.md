@@ -34,11 +34,11 @@ The graphical information represented below displays current testing values of f
 ## Visualizations
 - Taking the average embedding across the entire test set as a starting point (center column). Each element of the 50 element embedding vector is swepped +- 6 from the mean with a step of 1, while holding all other element constan.:
 #### Autoencoder
-![Autoencoder Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/autoencoder/visualizations.png)
+![Autoencoder Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/autoencoder/auto_visualizations.png)
 #### VAE
-![VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/beta_5_vae/visualizations.png)
+![VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/beta_5_vae/vae_visualizations.png)
 #### <a href="https://www.codecogs.com/eqnedit.php?latex=\beta" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\beta" title="\beta" /></a>-VAE
-![b5-VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/visualizations.png)
+![b5-VAE Visualizations](https://github.com/tall-josh/fyp_diy_robo_car/blob/master/report/vae/b5vae_visualizations.png)
 
 ---
 
