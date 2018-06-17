@@ -214,7 +214,7 @@ class DenoisingVaeGenerator(object):
         pbar.set_description("Loading Data")
         for name in pbar:
             im, an = load_image_anno_pair(image_dir, anno_dir, name)
-            n_im   = load_image(os.path.join(noisy_dir,name+".jpg")) 
+            n_im   = load_image(os.path.join(noisy_dir,name+".jpg"))
             pair = {}
             pair = self.preprocess_normalize_images(im, an, n_im)
             pair["name"] =  name
@@ -236,7 +236,7 @@ class DenoisingVaeGenerator(object):
 
     def add_100s_and_1000s(self, noisy_images):
         noise = np.random.choice([1, 0], size=np.prod(np.shape(noisy_images)), p=[0.7, 0.3])
-        noise = np.reshape(noise, np.shape(noisy_image))
+        noise = np.reshape(noise, np.shape(noisy_images))
         noisy_images *= noise
         return noisy_images
 
@@ -259,8 +259,7 @@ class DenoisingVaeGenerator(object):
             batch["noisy_images"].append(nim)
             batch["annotations"].append(an)
             batch["names"].append(pair["name"])
-
-        batch["noisy_images"] = add_100s_and_1000s(batch["noisy_images"])
+        batch["noisy_images"] = self.add_100s_and_1000s(batch["noisy_images"])
         # if gray scale add single channel dim
         if len(np.shape(batch["images"])) == 3:
             batch["images"] = np.expand_dims(batch["images"], axis=3)

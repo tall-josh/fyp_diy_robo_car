@@ -20,7 +20,7 @@ from generator import prepare_batch_images_and_labels_RAND_MIRROR as prep_batch
 from utils import *
 import numpy as np
 
-def load_graph(frozen_pb, prefix):
+def load_graph(frozen_pb, prefix=""):
   with tf.gfile.GFile(frozen_pb, "rb") as f:
     graph_def = tf.GraphDef()
     graph_def.ParseFromString(f.read())
